@@ -2,7 +2,7 @@ import { Color, draw_sprite, Rect, rect_copy, renderer_set_texture, Texture, tex
 
 export let _defaultFont: MonoFont = null as unknown as MonoFont;
 
-interface MonoFont
+export interface MonoFont
 {
     name: string;
     texture: Texture;

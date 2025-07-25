@@ -1,10 +1,9 @@
 import { console_toggle } from "../console";
 import { GameEvent, GameEventKey, GameEventType } from "../event";
 import { _defaultFont, font_get_line_height, font_get_text_dimension } from "../font";
-import { gui_process_event, gui_rect, UiWidgetState, UiWidgetCapability, widget_id, widget_context_of, gui_draw_text_editor } from "../gui";
+import { gui_process_event, gui_rect, UiWidgetState, UiWidgetCapability, widget_id, widget_context_of, gui_draw_text_editor, widget_context_set_text, widget_component_id, widget_activate } from "../gui";
 import { logic_set_controler, LogicControler } from "../logic";
-import { cursor_set, draw_quad, draw_rect, draw_text_in_rect, MouseCursor, Rect, rect_center, rect_cut_left, rect_cut_right, rect_cut_top, rect_shrink, rect_shrink_x, TextDrawOption, to_color, to_rect } from "../renderer";
-import { RESPONSE_ID_LIST_PROJECTS, ws_connect } from "../ws";
+import { cursor_set, draw_quad, draw_rect, draw_text_in_rect, MouseCursor, Rect, rect_center, rect_cut_left, rect_cut_right, rect_cut_top, rect_shrink, TextDrawOption, to_color, to_rect } from "../renderer";
 
 
 
@@ -44,24 +43,28 @@ function tab_type_from_name(s: string): TabType
 
 
 ////////////////////////////////////////////////////////////
-function tab_draw_text(rect: Rect, tab: FileSystemItem)
+function tab_draw_text(rect: Rect, tab: FileSystemItem, forceActivate: boolean =false)
 {
     if (tab.data === null) tab.data = "";
     let text = tab.data as string;
 
-    let widgetId = widget_id(tab.id);
-    let widget   = gui_rect(widgetId, rect, 1, UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE | UiWidgetCapability.ACTIVABLE | UiWidgetCapability.TEXT);
+    let widgetId = widget_component_id(tab.id, 2);
+    let widget   = gui_rect(widgetId, rect, 1, UiWidgetCapability.HOVERABLE |
+                                               UiWidgetCapability.CLICKABLE |
+                                               UiWidgetCapability.ACTIVABLE |
+                                               UiWidgetCapability.TEXT      |
+                                               UiWidgetCapability.TEXT_KEEP_STATE_AFTER_DE_ACTIVATION);
 
     if (widget.state & UiWidgetState.CREATED_THIS_FRAME)
     {
         let widgetContext = widget_context_of(widget);
-        widgetContext.text = text;
-        widget.text        = text;
-
+        widget_context_set_text(widgetContext, text);
+        widget.text = text;
         widgetContext.scale = 3;
     }
 
     gui_draw_text_editor(widget);
+    if (forceActivate) widget_activate(widget);
 }
 
 
@@ -182,7 +185,7 @@ function init()
         {
             flag    : FileSystemFlag.DIRECTORY,
             name    : "",
-            id      : 0,
+            id      : widget_id(),
             children: [],
             parent  : null,
             data    : null,
@@ -192,10 +195,10 @@ function init()
         {
             flag    : FileSystemFlag.DIRECTORY,
             name    : "d0",
-            id      : 1,
+            id      : widget_id(),
             children: [],
             parent  : _fileSystemRoot,
-            data    : "coucou",
+            data    : null,
         };
         _fileSystemRoot.children.push(d0);
 
@@ -204,10 +207,10 @@ function init()
         {
             flag    : FileSystemFlag.FILE,
             name    : "f0.txt",
-            id      : 2,
+            id      : widget_id(),
             children: [],
             parent  : d0,
-            data    : "Hello, Sailor!",
+            data    : "Hello, Sailor!\nI am a multi line text\nBlip Bloup",
         };
         d0.children.push(f0);
 
@@ -215,7 +218,7 @@ function init()
         {
             flag    : FileSystemFlag.FILE,
             name    : "f1.txt",
-            id      : 3,
+            id      : widget_id(),
             children: [],
             parent  : d0,
             data    : null,
@@ -226,7 +229,7 @@ function init()
         {
             flag    : FileSystemFlag.FILE,
             name    : "f2.txt",
-            id      : 5,
+            id      : widget_id(),
             children: [],
             parent  : d0,
             data    : null,
@@ -238,7 +241,7 @@ function init()
         {
             flag    : FileSystemFlag.DIRECTORY,
             name    : "d1",
-            id      : 4,
+            id      : widget_id(),
             children: [],
             parent  : _fileSystemRoot,
             data    : null,
@@ -324,6 +327,8 @@ function simulate(elapsedTime: number, frameId: number)
 ////////////////////////////////////////////////////////////
 function draw(windowRect: Rect, frameId: number)
 {
+    let hasChangedTabOnThisFrame = false;
+
     if (false)
     {
         let projectSelectionRect = to_rect(0, 0, Math.round(windowRect.width*0.5), Math.round(windowRect.height*0.6));
@@ -361,7 +366,7 @@ function draw(windowRect: Rect, frameId: number)
                     if (tabWidth < 120) tabWidth = 120;
 
                     let thisTabRect        = to_rect(x, y, tabWidth, tabRect.height);
-                    let tabId              = widget_id(tab.id);
+                    let tabId              = widget_component_id(tab.id, 0);
                     let tabWidget          = gui_rect(tabId, thisTabRect, 3, UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE);
                     let thisTabTextRect    = rect_shrink(thisTabRect, tabBarTextMargin);
                     let tabBackgroundColor = to_color(0, 0, 0, 1);
@@ -380,7 +385,8 @@ function draw(windowRect: Rect, frameId: number)
 
                     if (tabWidget.state & UiWidgetState.CLICKED)
                     {
-                        _selectedTab = tab;
+                        _selectedTab             = tab;
+                        hasChangedTabOnThisFrame = true;
                     }
 
                     draw_quad(thisTabRect, 2, tabBackgroundColor);
@@ -391,7 +397,7 @@ function draw(windowRect: Rect, frameId: number)
                     let closeIcontextDimensions = font_get_text_dimension("x", _defaultFont, tabBarFontScale);
 
                     let closeIconRect     = rect_center(closeIconOuterRect, closeIcontextDimensions);
-                    let closeButtonId     = widget_id(tab.id);
+                    let closeButtonId     = widget_component_id(tab.id, 1);
                     let closeButtonWidget = gui_rect(closeButtonId, closeIconRect, 4, UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE);
                     let closeButtonBackgroundColor = tabBackgroundColor;
                     if (closeButtonWidget.state & UiWidgetState.HOVERED)
@@ -423,7 +429,7 @@ function draw(windowRect: Rect, frameId: number)
             // Render data of file for edition
             if (_selectedTab !== null)
             {
-                if (tab_type_from_name(_selectedTab.name)) tab_draw_text(editorRect, _selectedTab);
+                if (tab_type_from_name(_selectedTab.name)) tab_draw_text(editorRect, _selectedTab, hasChangedTabOnThisFrame);
             }
         }
 
