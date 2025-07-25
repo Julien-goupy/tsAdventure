@@ -20,22 +20,23 @@ export const enum GameEventKey
     ARROW_RIGHT  = 258,
     ARROW_BOTTOM = 259,
 
-    TAB       = 260,
-    ENTER     = 261,
-    ESCAPE    = 262,
-    DELETE    = 263,
-    BACKSPACE = 264,
-    INSERT    = 265,
-    END       = 266,
-    HOME      = 267,
-    PAGE_UP   = 268,
-    PAGE_DOWN = 269,
-    SHIFT     = 270,
-    CAPS_LOCK = 271,
-    CONTROL   = 272,
-    ALT       = 273,
-    ALT_GR    = 274,
-    META      = 275, // window key on windows
+    TAB           = 260,
+    ENTER         = 261,
+    ESCAPE        = 262,
+    DELETE        = 263,
+    BACKSPACE     = 264,
+    INSERT        = 265,
+    END           = 266,
+    HOME          = 267,
+    PAGE_UP       = 268,
+    PAGE_DOWN     = 269,
+    SHIFT         = 270,
+    CAPS_LOCK     = 271,
+    CONTROL       = 272,
+    RIGHT_CONTROL = 273,
+    ALT           = 274,
+    ALT_GR        = 275,
+    META          = 276, // window key on windows
 
     F1  = 301,
     F2  = 302,
@@ -64,7 +65,11 @@ export const enum GameEventKey
 
 export const enum GameEventModifier
 {
-    NONE = 0,
+    NONE    = 0,
+    SHIFT   = 1 << 0,
+    CONTROL = 1 << 1,
+    ALT     = 1 << 2,
+    META    = 1 << 3,
 }
 
 
@@ -221,21 +226,35 @@ export function event_init()
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.SHIFT;
+
+            if (isPressed) _modifier |= GameEventModifier.SHIFT;
+            else           _modifier &= ~GameEventModifier.SHIFT;
         }
         else if (browserEvent.key === 'CapsLock')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.CAPS_LOCK;
         }
-        else if (browserEvent.key === 'Control')
+        else if (browserEvent.code === 'ControlLeft')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.CONTROL;
+
+            if (isPressed) _modifier |= GameEventModifier.CONTROL;
+            else           _modifier &= ~GameEventModifier.CONTROL;
+        }
+        else if (browserEvent.code === 'ControlRight')
+        {
+            event.type = GameEventType.KEY;
+            event.key  = GameEventKey.RIGHT_CONTROL;
         }
         else if (browserEvent.key === 'Alt')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.ALT;
+
+            if (isPressed) _modifier |= GameEventModifier.ALT;
+            else           _modifier &= ~GameEventModifier.ALT;
         }
         else if (browserEvent.key === 'AltGraph')
         {
@@ -246,6 +265,9 @@ export function event_init()
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.META;
+
+            if (isPressed) _modifier |= GameEventModifier.META;
+            else           _modifier &= ~GameEventModifier.META;
         }
 
 
