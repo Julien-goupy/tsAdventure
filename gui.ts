@@ -358,6 +358,11 @@ export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidg
         proc: _ui_no_proc
     };
 
+
+    if (capabilities & UiWidgetCapability.TEXT)
+        doesThisWidgetNeedContext = true;
+
+
     if (doesThisWidgetNeedContext)
     {
         if (_contexts.has(id) === false)
@@ -381,11 +386,18 @@ export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidg
     if (widget.id === _activeWidgetIdLastFrame && widget.id !== _activeWidgetId) widget.state |= UiWidgetState.DEACTIVATED_THIS_FRAME;
     if (widget.id !== _activeWidgetIdLastFrame && widget.id === _activeWidgetId) widget.state |= UiWidgetState.ACTIVATED_THIS_FRAME;
 
-    if (capabilities & UiWidgetCapability.CLICKABLE)
-        if (widget.state & UiWidgetState.HOVERED)
+    if (widget.state & UiWidgetState.HOVERED)
+    {
+        if (capabilities & UiWidgetCapability.CLICKABLE)
         {
             cursor_set(MouseCursor.POINTER);
         }
+        if (capabilities & UiWidgetCapability.TEXT)
+        {
+            cursor_set(MouseCursor.TEXT);
+        }
+    }
+
 
     _currentFrameWidget.push(widget);
 
@@ -395,33 +407,38 @@ export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidg
 
 
 
-
-
-
-export function gui_button(id: number, rect: Rect, z: number)
+////////////////////////////////////////////////////////////
+// MARK: TEXT
+////////////////////////////////////////////////////////////
+export const enum GuiTextEditorOption
 {
-    let widget: UiWidget =
-    {
-        id  : id,
-        rect: rect,
-        z   : z,
-
-        capabilities: UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE,
-        state       : 0,
-
-        text: null as unknown as string,
-
-        proc: _ui_no_proc
-    };
-
-    if (widget.id === _activeWidgetId)  widget.state |= UiWidgetState.GRABBED;
-    if (widget.id === _hoveredWidgetId) widget.state |= UiWidgetState.HOVERED;
-    if (widget.id === _clickedWidgetId) widget.state |= UiWidgetState.CLICKED;
-
-    _currentFrameWidget.push(widget);
-
-    return widget;
+    NONE             = 0,
+    SHOW_LINE_NUMBER = 1 << 0,
 }
+
+
+export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOption =GuiTextEditorOption.NONE)
+{
+    let lines = widget.text.split("\n");
+    let x     = widget.rect.x;
+    let y     = widget.rect.y;
+    let font  = _defaultFont;
+    let scale = 3;
+
+    for (let i=0; i < lines.length ; i+=1)
+    {
+        let line = lines[i];
+        for (let j=0; j < line.length ;j+=1)
+        {
+            font_draw_ascii(x, y, widget.z, font, scale, line[j]);
+            x += font.width * scale;
+        }
+    }
+}
+
+
+
+
 
 
 

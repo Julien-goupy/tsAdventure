@@ -1,7 +1,7 @@
 import { console_toggle } from "../console";
 import { GameEvent, GameEventKey, GameEventType } from "../event";
 import { _defaultFont, font_get_line_height, font_get_text_dimension } from "../font";
-import { gui_process_event, gui_rect, UiWidgetState, UiWidgetCapability, widget_id, widget_context_of } from "../gui";
+import { gui_process_event, gui_rect, UiWidgetState, UiWidgetCapability, widget_id, widget_context_of, gui_draw_text_editor } from "../gui";
 import { logic_set_controler, LogicControler } from "../logic";
 import { cursor_set, draw_quad, draw_rect, draw_text_in_rect, MouseCursor, Rect, rect_center, rect_cut_left, rect_cut_right, rect_cut_top, rect_shrink, rect_shrink_x, TextDrawOption, to_color, to_rect } from "../renderer";
 import { RESPONSE_ID_LIST_PROJECTS, ws_connect } from "../ws";
@@ -46,14 +46,20 @@ function tab_type_from_name(s: string): TabType
 ////////////////////////////////////////////////////////////
 function tab_draw_text(rect: Rect, tab: FileSystemItem)
 {
-    let widgetId      = widget_id(tab.id);
-    let widget        = gui_rect(widgetId, rect, 1, UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE | UiWidgetCapability.TEXT);
-    let widgetContext = widget_context_of(widget);
-
     if (tab.data === null) tab.data = "";
-
     let text = tab.data as string;
 
+    let widgetId = widget_id(tab.id);
+    let widget   = gui_rect(widgetId, rect, 1, UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE | UiWidgetCapability.TEXT);
+
+    if (widget.state & UiWidgetState.CREATED_THIS_FRAME)
+    {
+        let widgetContext = widget_context_of(widget);
+        widgetContext.text = text;
+        widget.text        = text;
+    }
+
+    gui_draw_text_editor(widget);
 }
 
 
@@ -187,7 +193,7 @@ function init()
             id      : 1,
             children: [],
             parent  : _fileSystemRoot,
-            data    : null,
+            data    : "coucou",
         };
         _fileSystemRoot.children.push(d0);
 
@@ -199,7 +205,7 @@ function init()
             id      : 2,
             children: [],
             parent  : d0,
-            data    : null,
+            data    : "Hello, Sailor!",
         };
         d0.children.push(f0);
 
