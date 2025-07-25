@@ -17,8 +17,14 @@ export const enum UiWidgetCapability
     TEXT_UPDATE     = 1 << 5,
     TEXT            = TEXT_SELECTABLE | TEXT_UPDATE,
 
+    BUTTON_CAPABILITY = HOVERABLE | CLICKABLE,
+    TEXT_CAPABILITY   = HOVERABLE | GRABBABLE | CLICKABLE | ACTIVABLE | TEXT_SELECTABLE | TEXT_UPDATE,
+
     TEXT_KEEP_STATE_AFTER_DE_ACTIVATION = 1 << 6,
 }
+
+
+
 
 
 export const enum UiWidgetState
@@ -39,8 +45,8 @@ const enum UiWidgetInternalEvent
     ACTIVATION    = 1,
     DE_ACTIVATION = 2,
 
-    CLICKED = 3,
-    TEXT    = 4,
+    CLICKED = 4,
+    TEXT    = 5,
 }
 
 
@@ -79,14 +85,15 @@ interface UiContext
 }
 
 
+let _hoveredWidgetZ         : number                 = -1;
+let _hoveredWidgetId        : number                 = -1;
+let _hoveredWidget          : UiWidget               = null as unknown as UiWidget;
+let _isGrabbing             : boolean                = false;
 let _activeWidgetId         : number                 = -1;
 let _activeWidgetIdLastFrame: number                 = -1;
 let _activeWidget           : UiWidget               = null as unknown as UiWidget;
 let _currentFrameWidget     : UiWidget[]             = [];
 let _contexts               : Map<number, UiContext> = new Map();
-let _hoveredWidgetZ         : number                 = -1;
-let _hoveredWidgetId        : number                 = -1;
-let _hoveredWidget          : UiWidget               = null as unknown as UiWidget;
 
 let _clickedWidgetId: number = -1;
 
@@ -162,65 +169,75 @@ export function gui_init_frame()
 
 
 ////////////////////////////////////////////////////////////
-export function gui_process_event(event: GameEvent): boolean
+export function gui_process_event(events: GameEvent[]): GameEvent[]
 {
-    let hasEventBeenProcessed = false;
+    let unProcessedEvents: GameEvent[] = [];
 
-
-    if (event.type === GameEventType.KEY)
+    for (let event of events)
     {
-        if (event.key === GameEventKey.MOUSSE_LEFT)
+        let hasEventBeenProcessed = false;
+
+        if (event.type === GameEventType.KEY)
         {
-            if (event.isPressed)
+            if (event.key === GameEventKey.MOUSSE_LEFT)
             {
-                if (_hoveredWidgetId !== _activeWidgetId && _activeWidget !== null)
+                if (event.isPressed)
                 {
-                    _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
-                    _activeWidget   = null as unknown as UiWidget;
-                    _activeWidgetId = -1;
-                }
-
-                if (_hoveredWidget !== null)
-                {
-                    if (_hoveredWidgetId !== _activeWidgetId)
-                        _widget_proc(_hoveredWidget, UiWidgetInternalEvent.ACTIVATION, null);
-                    _widget_proc(_hoveredWidget, UiWidgetInternalEvent.CLICKED, null);
-                    _activeWidget   = _hoveredWidget;
-                    _activeWidgetId = _hoveredWidgetId;
-                    hasEventBeenProcessed = true;
-                }
-            }
-            else
-            {
-                if (_activeWidgetId !== -1 && (_activeWidget.capabilities & UiWidgetCapability.CLICKABLE) === UiWidgetCapability.CLICKABLE)
-                {
-                    if (_hoveredWidgetId === _activeWidgetId)
-                    {
-                        _clickedWidgetId = _hoveredWidgetId;
-                    }
-
-                    if ((_activeWidget.capabilities & UiWidgetCapability.ACTIVABLE) === 0)
+                    if (_hoveredWidgetId !== _activeWidgetId && _activeWidget !== null)
                     {
                         _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
                         _activeWidget   = null as unknown as UiWidget;
                         _activeWidgetId = -1;
                     }
+
+                    if (_hoveredWidget !== null)
+                    {
+                        if (_hoveredWidgetId !== _activeWidgetId)
+                            _widget_proc(_hoveredWidget, UiWidgetInternalEvent.ACTIVATION, null);
+                        _widget_proc(_hoveredWidget, UiWidgetInternalEvent.CLICKED, null);
+                        _activeWidget   = _hoveredWidget;
+                        _activeWidgetId = _hoveredWidgetId;
+                        _isGrabbing           = true;
+                        hasEventBeenProcessed = true;
+                    }
                 }
+                else
+                {
+                    _isGrabbing = false;
+
+                    if (_activeWidgetId !== -1 && (_activeWidget.capabilities & UiWidgetCapability.CLICKABLE) === UiWidgetCapability.CLICKABLE)
+                    {
+                        if (_hoveredWidgetId === _activeWidgetId)
+                        {
+                            _clickedWidgetId = _hoveredWidgetId;
+                        }
+
+                        if ((_activeWidget.capabilities & UiWidgetCapability.ACTIVABLE) === 0)
+                        {
+                            _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
+                            _activeWidget   = null as unknown as UiWidget;
+                            _activeWidgetId = -1;
+                        }
+                    }
+                }
+            }
+
+            if (event_is_keyboard(event) &&
+                event.isPressed          &&
+                _activeWidgetId !== -1   &&
+                (_activeWidget.capabilities & UiWidgetCapability.TEXT)
+            )
+            {
+                hasEventBeenProcessed = _widget_proc(_activeWidget, UiWidgetInternalEvent.TEXT, event);
             }
         }
 
-        if (event_is_keyboard(event) &&
-            event.isPressed          &&
-            _activeWidgetId !== -1   &&
-            (_activeWidget.capabilities & UiWidgetCapability.TEXT)
-           )
-        {
-            hasEventBeenProcessed = _widget_proc(_activeWidget, UiWidgetInternalEvent.TEXT, event);
-        }
+        if (hasEventBeenProcessed === false)
+            unProcessedEvents.push(event);
+
     }
 
-
-    return hasEventBeenProcessed;
+    return unProcessedEvents;
 }
 
 
@@ -547,6 +564,9 @@ export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidg
         }
     }
 
+    if (_isGrabbing && (widget.capabilities & UiWidgetCapability.GRABBABLE))
+    {
+    }
 
     _currentFrameWidget.push(widget);
 
@@ -594,6 +614,18 @@ function _find_cursor_position(s: string, font: MonoFont, scale: number, x: numb
     if (cursorPosition === -1) cursorPosition = s.length;
     return cursorPosition;
 }
+
+
+////////////////////////////////////////////////////////////
+function _find_next_cursor_position(s: string, cursorPosition: number): number
+{
+
+
+}
+
+
+
+
 
 
 

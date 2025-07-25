@@ -1,9 +1,9 @@
-import { console_toggle } from "../console";
-import { GameEvent, GameEventKey, GameEventType } from "../event";
-import { _defaultFont, font_get_line_height, font_get_text_dimension } from "../font";
-import { gui_process_event, gui_rect, UiWidgetState, UiWidgetCapability, widget_id, widget_context_of, gui_draw_text_editor, widget_context_set_text, widget_component_id, widget_activate } from "../gui";
-import { logic_set_controler, LogicControler } from "../logic";
-import { cursor_set, draw_quad, draw_rect, draw_text_in_rect, MouseCursor, Rect, rect_center, rect_cut_left, rect_cut_right, rect_cut_top, rect_shrink, TextDrawOption, to_color, to_rect } from "../renderer";
+import {console_toggle} from "../console";
+import {GameEvent,GameEventKey,GameEventType} from "../event";
+import {_defaultFont,font_get_line_height,font_get_text_dimension} from "../font";
+import {gui_rect,UiWidgetState,UiWidgetCapability,widget_id,widget_context_of,gui_draw_text_editor,widget_context_set_text,widget_component_id,widget_activate} from "../gui";
+import {logic_set_controler,LogicControler} from "../logic";
+import {cursor_set,draw_quad,draw_rect,draw_text_in_rect,MouseCursor,Rect,rect_center,rect_cut_left,rect_cut_right,rect_cut_top,rect_shrink,TextDrawOption,to_color,to_rect} from "../renderer";
 
 
 
@@ -49,10 +49,7 @@ function tab_draw_text(rect: Rect, tab: FileSystemItem, forceActivate: boolean =
     let text = tab.data as string;
 
     let widgetId = widget_component_id(tab.id, 2);
-    let widget   = gui_rect(widgetId, rect, 1, UiWidgetCapability.HOVERABLE |
-                                               UiWidgetCapability.CLICKABLE |
-                                               UiWidgetCapability.ACTIVABLE |
-                                               UiWidgetCapability.TEXT      |
+    let widget   = gui_rect(widgetId, rect, 1, UiWidgetCapability.TEXT_CAPABILITY |
                                                UiWidgetCapability.TEXT_KEEP_STATE_AFTER_DE_ACTIVATION);
 
     if (widget.state & UiWidgetState.CREATED_THIS_FRAME)
@@ -300,18 +297,6 @@ function process_event(events: GameEvent[])
         {
             if (it.key === GameEventKey.F5 && it.isPressed) location.reload();
             if (it.key === GameEventKey.F1 && it.isPressed) console_toggle();
-        }
-
-
-        if (gui_process_event(it)) continue;
-
-
-        if (it.type === GameEventType.KEY)
-        {
-            if (it.key === GameEventKey.ARROW_LEFT)   {}
-            if (it.key === GameEventKey.ARROW_RIGHT)  {}
-            if (it.key === GameEventKey.ARROW_UP)     {}
-            if (it.key === GameEventKey.ARROW_BOTTOM) {}
         }
     }
 }

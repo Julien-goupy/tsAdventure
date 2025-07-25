@@ -1,5 +1,5 @@
 import { event_get_frame_event, GameEvent } from "./event";
-import { gui_init_frame, gui_prepare_new_frame } from "./gui";
+import { gui_init_frame, gui_prepare_new_frame, gui_process_event } from "./gui";
 import { Rect, renderer_get_window_info, renderer_immediate_flush, renderer_start_frame } from "./renderer";
 
 
@@ -44,6 +44,7 @@ export function game_render_one_frame() {
     _now = performance.now() / 1000.0;
     let elapsedTime = _now - _lastFrameTime;
 
+    events = gui_process_event(events);
     _currentControler.process_event(events);
 
     gui_prepare_new_frame();
