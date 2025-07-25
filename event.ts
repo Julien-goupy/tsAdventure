@@ -30,6 +30,12 @@ export const enum GameEventKey
     HOME      = 267,
     PAGE_UP   = 268,
     PAGE_DOWN = 269,
+    SHIFT     = 270,
+    CAPS_LOCK = 271,
+    CONTROL   = 272,
+    ALT       = 273,
+    ALT_GR    = 274,
+    META      = 275, // window key on windows
 
     F1  = 301,
     F2  = 302,
@@ -210,6 +216,36 @@ export function event_init()
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.INSERT;
+        }
+        else if (browserEvent.key === 'Shift')
+        {
+            event.type = GameEventType.KEY;
+            event.key  = GameEventKey.SHIFT;
+        }
+        else if (browserEvent.key === 'CapsLock')
+        {
+            event.type = GameEventType.KEY;
+            event.key  = GameEventKey.CAPS_LOCK;
+        }
+        else if (browserEvent.key === 'Control')
+        {
+            event.type = GameEventType.KEY;
+            event.key  = GameEventKey.CONTROL;
+        }
+        else if (browserEvent.key === 'Alt')
+        {
+            event.type = GameEventType.KEY;
+            event.key  = GameEventKey.ALT;
+        }
+        else if (browserEvent.key === 'AltGraph')
+        {
+            event.type = GameEventType.KEY;
+            event.key  = GameEventKey.ALT_GR;
+        }
+        else if (browserEvent.key === 'Meta')
+        {
+            event.type = GameEventType.KEY;
+            event.key  = GameEventKey.META;
         }
 
 
