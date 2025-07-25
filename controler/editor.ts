@@ -50,13 +50,15 @@ function tab_draw_text(rect: Rect, tab: FileSystemItem)
     let text = tab.data as string;
 
     let widgetId = widget_id(tab.id);
-    let widget   = gui_rect(widgetId, rect, 1, UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE | UiWidgetCapability.TEXT);
+    let widget   = gui_rect(widgetId, rect, 1, UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE | UiWidgetCapability.ACTIVABLE | UiWidgetCapability.TEXT);
 
     if (widget.state & UiWidgetState.CREATED_THIS_FRAME)
     {
         let widgetContext = widget_context_of(widget);
         widgetContext.text = text;
         widget.text        = text;
+
+        widgetContext.scale = 3;
     }
 
     gui_draw_text_editor(widget);

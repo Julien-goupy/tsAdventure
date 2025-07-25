@@ -52,15 +52,7 @@ export interface UiWidget
     state       : UiWidgetState;
 
     text: string;
-
-    proc: (widget: UiWidget, eventType: UiWidgetInternalEvent, event: GameEvent | null) => boolean;
 }
-
-function _ui_no_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event: GameEvent | null): boolean
-{
-    return false;
-}
-
 
 
 interface UiContext
@@ -74,7 +66,8 @@ interface UiContext
     // Text
     scale            : number;
     text             : string;
-    cursorPosition   : number;
+    cursorPositionX  : number;
+    cursorPositionY  : number;
     selectionPosition: number;
 
     // Scroll
@@ -104,7 +97,8 @@ function get_context(): UiContext
         selected         : null as unknown as number[],
         scale            : 1,
         text             : null as unknown as string,
-        cursorPosition   : -1,
+        cursorPositionX  : -1,
+        cursorPositionY  : -1,
         selectionPosition: -1,
         offsetX          : 0,
         offsetY          : 0,
@@ -173,17 +167,18 @@ export function gui_process_event(event: GameEvent): boolean
         {
             if (event.isPressed)
             {
-                if (_hoveredWidget !== _activeWidget && _activeWidget !== null)
+                if (_hoveredWidgetId !== _activeWidgetId && _activeWidget !== null)
                 {
-                    _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
+                    _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
                     _activeWidget   = null as unknown as UiWidget;
                     _activeWidgetId = -1;
                 }
 
                 if (_hoveredWidget !== null)
                 {
-                    _hoveredWidget.proc(_hoveredWidget, UiWidgetInternalEvent.ACTIVATION, null);
-                    _hoveredWidget.proc(_hoveredWidget, UiWidgetInternalEvent.CLICKED   , null);
+                    if (_hoveredWidgetId !== _activeWidgetId)
+                        _widget_proc(_hoveredWidget, UiWidgetInternalEvent.ACTIVATION, null);
+                    _widget_proc(_hoveredWidget, UiWidgetInternalEvent.CLICKED, null);
                     _activeWidget   = _hoveredWidget;
                     _activeWidgetId = _hoveredWidgetId;
                     hasEventBeenProcessed = true;
@@ -200,7 +195,7 @@ export function gui_process_event(event: GameEvent): boolean
 
                     if ((_activeWidget.capabilities & UiWidgetCapability.ACTIVABLE) === 0)
                     {
-                        _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
+                        _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
                         _activeWidget   = null as unknown as UiWidget;
                         _activeWidgetId = -1;
                     }
@@ -214,9 +209,127 @@ export function gui_process_event(event: GameEvent): boolean
             (_activeWidget.capabilities & UiWidgetCapability.TEXT)
            )
         {
-            hasEventBeenProcessed = _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.TEXT, event);
+            hasEventBeenProcessed = _widget_proc(_activeWidget, UiWidgetInternalEvent.TEXT, event);
         }
     }
+
+
+    return hasEventBeenProcessed;
+}
+
+
+
+
+////////////////////////////////////////////////////////////
+function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event: GameEvent | null): boolean
+{
+    let hasEventBeenProcessed = false;
+
+    if (widget.capabilities & UiWidgetCapability.TEXT)
+    {
+        let context = _contexts.get(widget.id);
+
+        if (context === undefined)
+        {
+            console.error(`Text input id [${widget.id}] does not have a context`);
+            return false;
+        }
+
+
+        if (eventType === UiWidgetInternalEvent.ACTIVATION)
+        {
+            console.log("Text ACTIVATION");
+            context.cursorPositionX   = context.text.length;
+            context.cursorPositionY   = 0;
+            context.selectionPosition = -1;
+
+            hasEventBeenProcessed = true;
+        }
+
+        else if (eventType === UiWidgetInternalEvent.CLICKED)
+        {
+            console.log("Text CLICKED");
+            let localMouseX = mouseX - (widget.rect.x + context.offsetX);
+            let localMouseY = mouseY - (widget.rect.y + context.offsetY);
+
+            context.cursorPositionX   = Math.floor(localMouseX / (6*context.scale));
+            context.cursorPositionY   = 0;
+            context.selectionPosition = -1;
+
+            hasEventBeenProcessed = true;
+        }
+
+        else if (eventType === UiWidgetInternalEvent.DE_ACTIVATION)
+        {
+            console.log("Text DE_ACTIVATION");
+            context.cursorPositionX   = -1;
+            context.cursorPositionY   = -1;
+            context.selectionPosition = -1;
+        }
+
+        else if (eventType === UiWidgetInternalEvent.TEXT)
+        {
+            console.log("Text TEXT");
+            if (event === null)
+            {
+                console.error(`Text input id [${widget.id}] cannot process a null TEXT event`);
+                return false;
+            }
+
+            if (event.isPressed)
+            {
+                if (event.key === GameEventKey.ARROW_LEFT)
+                {
+                    context.cursorPositionX -= 1;
+                    hasEventBeenProcessed = true;
+                }
+
+                else if (event.key === GameEventKey.ARROW_RIGHT)
+                {
+                    context.cursorPositionX += 1;
+                    hasEventBeenProcessed = true;
+                }
+
+                else if (event.key === GameEventKey.BACKSPACE)
+                {
+                    if (context.cursorPositionX > 0)
+                    {
+                        context.text = context.text.slice(0, context.cursorPositionX-1) + context.text.slice(context.cursorPositionX);
+                        context.cursorPositionX -= 1;
+                    }
+
+                    hasEventBeenProcessed = true;
+                }
+
+                else if (event_is_printable(event))
+                {
+                    if (context.cursorPositionX >= 0)
+                    {
+                        context.text = context.text.slice(0, context.cursorPositionX) + String.fromCharCode(event.key) + context.text.slice(context.cursorPositionX);
+                        context.cursorPositionX += 1;
+                    }
+
+                    hasEventBeenProcessed = true;
+                }
+
+            }
+        }
+
+        if (hasEventBeenProcessed)
+        {
+            if (context.cursorPositionX < 0)                   context.cursorPositionX = 0;
+            if (context.cursorPositionX > context.text.length) context.cursorPositionX = context.text.length;
+
+            let cursorX = context.offsetX  +  6 * context.scale * context.cursorPositionX;
+            let offsetX = context.offsetX;
+
+            if (cursorX < 0)                 offsetX -= cursorX;
+            if (cursorX > widget.rect.width) offsetX -= (cursorX - widget.rect.width) + context.scale;
+
+            context.offsetX = offsetX;
+        }
+    }
+
 
 
     return hasEventBeenProcessed;
@@ -301,7 +414,7 @@ export function widget_deactivate(widgetId: number)
 {
     if (_activeWidgetId === widgetId)
     {
-        _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
+        _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
         _activeWidget   = null as unknown as UiWidget;
         _activeWidgetId = -1;
     }
@@ -314,11 +427,11 @@ export function widget_activate(widget: UiWidget)
     if (_activeWidgetId !== widget.id)
     {
         if (_activeWidgetId !== -1)
-            _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
+            _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
 
         _activeWidget   = widget;
         _activeWidgetId = widget.id;
-        _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.ACTIVATION, null);
+        _widget_proc(_activeWidget, UiWidgetInternalEvent.ACTIVATION, null);
     }
 }
 
@@ -353,9 +466,7 @@ export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidg
         capabilities: capabilities,
         state       : 0,
 
-        text: null as unknown as string,
-
-        proc: _ui_no_proc
+        text: null as unknown as string
     };
 
 
@@ -419,20 +530,41 @@ export const enum GuiTextEditorOption
 
 export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOption =GuiTextEditorOption.NONE)
 {
-    let lines = widget.text.split("\n");
-    let x     = widget.rect.x;
-    let y     = widget.rect.y;
-    let font  = _defaultFont;
-    let scale = 3;
+    let context    = widget_context_of(widget);
+    let lines      = widget.text.split("\n");
+    let x          = widget.rect.x;
+    let y          = widget.rect.y;
+    let font       = _defaultFont;
+    let scale      = context.scale;
+    let lineHeight = scale * font.height;
+
+    let cursorX = context.cursorPositionX;
+    let cursorY = context.cursorPositionY;
 
     for (let i=0; i < lines.length ; i+=1)
     {
         let line = lines[i];
-        for (let j=0; j < line.length ;j+=1)
+        let j    = 0;
+        for (; j < line.length ;j+=1)
         {
-            font_draw_ascii(x, y, widget.z, font, scale, line[j]);
+            font_draw_ascii(x, y, widget.z + 1, font, scale, line[j]);
+
+            if (i === cursorY && j === cursorX)
+            {
+                let cursorRect = to_rect(x, y, scale, lineHeight);
+                draw_quad(cursorRect, widget.z + 2, to_color(1, 0, 0, 1));
+            }
+
             x += font.width * scale;
         }
+
+        if (i === cursorY && j === cursorX)
+        {
+            let cursorRect = to_rect(x, y, scale, lineHeight);
+            draw_quad(cursorRect, widget.z + 2, to_color(1, 0, 0, 1));
+        }
+
+        y += lineHeight;
     }
 }
 
@@ -443,108 +575,6 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
 
 
 
-////////////////////////////////////////////////////////////
-function _text_input_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event: GameEvent | null): boolean
-{
-    let context               = _contexts.get(widget.id);
-    let hasEventBeenProcessed = false;
-
-    if (context === undefined)
-    {
-        console.error(`Text input id [${widget.id}] does not have a context`);
-        return false;
-    }
-
-
-    if (eventType === UiWidgetInternalEvent.ACTIVATION)
-    {
-        context.cursorPosition    = context.text.length;
-        context.selectionPosition = -1;
-
-        hasEventBeenProcessed = true;
-    }
-
-    else if (eventType === UiWidgetInternalEvent.CLICKED)
-    {
-        let localMouseX = mouseX - (widget.rect.x + context.offsetX);
-        let localMouseY = mouseY - (widget.rect.y + context.offsetY);
-
-        context.cursorPosition    = Math.floor(localMouseX / (6*context.scale));
-        context.selectionPosition = -1;
-
-        hasEventBeenProcessed = true;
-    }
-
-    else if (eventType === UiWidgetInternalEvent.DE_ACTIVATION)
-    {
-        context.cursorPosition    = -1;
-        context.selectionPosition = -1;
-    }
-
-    else if (eventType === UiWidgetInternalEvent.TEXT)
-    {
-        if (event === null)
-        {
-            console.error(`Text input id [${widget.id}] cannot process a null TEXT event`);
-            return false;
-        }
-
-        if (event.isPressed)
-        {
-            if (event.key === GameEventKey.ARROW_LEFT)
-            {
-                context.cursorPosition -= 1;
-                hasEventBeenProcessed = true;
-            }
-
-            else if (event.key === GameEventKey.ARROW_RIGHT)
-            {
-                context.cursorPosition += 1;
-                hasEventBeenProcessed = true;
-            }
-
-            else if (event.key === GameEventKey.BACKSPACE)
-            {
-                if (context.cursorPosition > 0)
-                {
-                    context.text = context.text.slice(0, context.cursorPosition-1) + context.text.slice(context.cursorPosition);
-                    context.cursorPosition -= 1;
-                }
-
-                hasEventBeenProcessed = true;
-            }
-
-            else if (event_is_printable(event))
-            {
-                if (context.cursorPosition >= 0)
-                {
-                    context.text = context.text.slice(0, context.cursorPosition) + String.fromCharCode(event.key) + context.text.slice(context.cursorPosition);
-                    context.cursorPosition += 1;
-                }
-
-                hasEventBeenProcessed = true;
-            }
-
-        }
-    }
-
-
-    if (hasEventBeenProcessed)
-    {
-        if (context.cursorPosition < 0)                   context.cursorPosition = 0;
-        if (context.cursorPosition > context.text.length) context.cursorPosition = context.text.length;
-
-        let cursorX = context.offsetX  +  6 * context.scale * context.cursorPosition;
-        let offsetX = context.offsetX;
-
-        if (cursorX < 0)                 offsetX -= cursorX;
-        if (cursorX > widget.rect.width) offsetX -= (cursorX - widget.rect.width) + context.scale;
-
-        context.offsetX = offsetX;
-    }
-
-    return hasEventBeenProcessed;
-}
 
 
 ////////////////////////////////////////////////////////////
@@ -576,8 +606,6 @@ export function gui_text_input(id: number, rect: Rect, z: number, s: string)
         state       : 0,
 
         text: context.text,
-
-        proc: _text_input_proc
     };
 
     if (widget.id === _activeWidgetId)  widget.state |= UiWidgetState.GRABBED;
@@ -614,7 +642,7 @@ export function gui_text_input_draw(widget: UiWidget)
     {
         font_draw_ascii(x, y, z+1, _defaultFont, scale, text[i]);
 
-        if (i === context.cursorPosition)
+        if (i === context.cursorPositionX)
         {
             let cursorRect = to_rect(x, y, scale, scale*10);
             draw_quad(cursorRect, z+2, to_color(1, 0, 0, 1));
@@ -623,7 +651,7 @@ export function gui_text_input_draw(widget: UiWidget)
         x += scale*6;
     }
 
-    if (context.cursorPosition >= text.length)
+    if (context.cursorPositionX >= text.length)
     {
         let cursorRect = to_rect(x, y, scale, scale*10);
         draw_quad(cursorRect, z+2, to_color(1, 0, 0, 1));

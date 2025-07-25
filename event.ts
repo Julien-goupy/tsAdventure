@@ -370,7 +370,7 @@ export function event_get_frame_event(): GameEvent[]
 export function event_is_keyboard(event: GameEvent): boolean
 {
     return (event.type === GameEventType.KEY) &&
-           (GameEventKey.START_OF_KEYBOARD <= event.key && event.key <= GameEventKey.END_OF_KEYBOARD);
+           (GameEventKey.START_OF_KEYBOARD <= event.key && event.key < GameEventKey.END_OF_KEYBOARD);
 }
 
 
@@ -386,6 +386,6 @@ export function event_is_printable(event: GameEvent): boolean
 export function event_is_mouse(event: GameEvent): boolean
 {
     return (event.type === GameEventType.KEY) &&
-           (GameEventKey.END_OF_KEYBOARD <= event.key && event.key <= GameEventKey.END_OF_MOUSE);
+           (GameEventKey.END_OF_KEYBOARD <= event.key && event.key < GameEventKey.END_OF_MOUSE);
 }
 
