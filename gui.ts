@@ -1,0 +1,616 @@
+import { event_is_keyboard, event_is_printable, GameEvent, GameEventKey, GameEventType, mouseX, mouseY } from "./event";
+import {_defaultFont, font_draw_ascii} from "./font";
+import { draw_quad, draw_text, Rect, rect_contain, renderer_scissor_pop, renderer_scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
+
+////////////////////////////////////////////////////////////
+// MARK: SYSTEM
+////////////////////////////////////////////////////////////
+export const enum UiWidgetCapability
+{
+    NONE      = 0,
+    HOVERABLE = 1 << 0,
+    GRABBABLE = 1 << 1,
+    CLICKABLE = 1 << 2,
+    ACTIVABLE = 1 << 3,
+
+    TEXT_SELECTABLE = 1 << 4,
+    TEXT_UPDATE     = 1 << 5,
+    TEXT            = TEXT_SELECTABLE | TEXT_UPDATE,
+}
+
+
+export const enum UiWidgetState
+{
+    EMPTY                  = 0,
+    CREATED_THIS_FRAME     = 1 << 0,
+    ACTIVATED_THIS_FRAME   = 1 << 1,
+    DEACTIVATED_THIS_FRAME = 1 << 2,
+    HOVERED                = 1 << 3,
+    ACTIVE                 = 1 << 4,
+    GRABBED                = 1 << 5,
+    CLICKED                = 1 << 6,
+}
+
+
+const enum UiWidgetInternalEvent
+{
+    ACTIVATION    = 1,
+    DE_ACTIVATION = 2,
+
+    CLICKED = 3,
+    TEXT    = 4,
+}
+
+
+export interface UiWidget
+{
+    id  : number;
+    rect: Rect;
+    z   : number;
+
+    capabilities: UiWidgetCapability;
+    state       : UiWidgetState;
+
+    text: string;
+
+    proc: (widget: UiWidget, eventType: UiWidgetInternalEvent, event: GameEvent | null) => boolean;
+}
+
+function _ui_no_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event: GameEvent | null): boolean
+{
+    return false;
+}
+
+
+
+interface UiContext
+{
+    // radio / checkbox
+    isOn: boolean;
+
+    // select
+    selected: number[];
+
+    // Text
+    scale            : number;
+    text             : string;
+    cursorPosition   : number;
+    selectionPosition: number;
+
+    // Scroll
+    offsetX: number;
+    offsetY: number;
+}
+
+
+let _activeWidgetId         : number                 = -1;
+let _activeWidgetIdLastFrame: number                 = -1;
+let _activeWidget           : UiWidget               = null as unknown as UiWidget;
+let _currentFrameWidget     : UiWidget[]             = [];
+let _contexts               : Map<number, UiContext> = new Map();
+let _hoveredWidgetZ         : number                 = -1;
+let _hoveredWidgetId        : number                 = -1;
+let _hoveredWidget          : UiWidget               = null as unknown as UiWidget;
+
+let _clickedWidgetId: number = -1;
+
+
+
+////////////////////////////////////////////////////////////
+function get_context(): UiContext
+{
+    return {
+        isOn             : false,
+        selected         : null as unknown as number[],
+        scale            : 1,
+        text             : null as unknown as string,
+        cursorPosition   : -1,
+        selectionPosition: -1,
+        offsetX          : 0,
+        offsetY          : 0,
+    };
+}
+
+
+
+
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////
+export function gui_init()
+{
+
+}
+
+
+////////////////////////////////////////////////////////////
+export function gui_init_frame()
+{
+    _hoveredWidgetZ  = -1;
+    _hoveredWidgetId = -1;
+    _hoveredWidget   = null as unknown as UiWidget;
+    _clickedWidgetId = -1;
+
+    let activeWidget = null as unknown as UiWidget;
+
+    for (let it of _currentFrameWidget)
+    {
+        if (it.id === _activeWidgetId) activeWidget = it;
+
+        if (rect_contain(it.rect, mouseX, mouseY)                                              &&
+            it.z > _hoveredWidgetZ                                                             &&
+            (it.capabilities & UiWidgetCapability.HOVERABLE) === UiWidgetCapability.HOVERABLE   )
+        {
+            _hoveredWidgetZ  = it.z;
+            _hoveredWidgetId = it.id;
+            _hoveredWidget   = it;
+        }
+    }
+
+    if (activeWidget === null)
+    {
+        _activeWidget   = null as unknown as UiWidget;
+        _activeWidgetId = -1;
+    }
+}
+
+
+
+////////////////////////////////////////////////////////////
+export function gui_process_event(event: GameEvent): boolean
+{
+    let hasEventBeenProcessed = false;
+
+
+    if (event.type === GameEventType.KEY)
+    {
+        if (event.key === GameEventKey.MOUSSE_LEFT)
+        {
+            if (event.isPressed)
+            {
+                if (_hoveredWidget !== _activeWidget && _activeWidget !== null)
+                {
+                    _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
+                    _activeWidget   = null as unknown as UiWidget;
+                    _activeWidgetId = -1;
+                }
+
+                if (_hoveredWidget !== null)
+                {
+                    _hoveredWidget.proc(_hoveredWidget, UiWidgetInternalEvent.ACTIVATION, null);
+                    _hoveredWidget.proc(_hoveredWidget, UiWidgetInternalEvent.CLICKED   , null);
+                    _activeWidget   = _hoveredWidget;
+                    _activeWidgetId = _hoveredWidgetId;
+                    hasEventBeenProcessed = true;
+                }
+            }
+            else
+            {
+                if (_activeWidgetId !== -1 && (_activeWidget.capabilities & UiWidgetCapability.CLICKABLE) === UiWidgetCapability.CLICKABLE)
+                {
+                    if (_hoveredWidgetId === _activeWidgetId)
+                    {
+                        _clickedWidgetId = _hoveredWidgetId;
+                    }
+
+                    if ((_activeWidget.capabilities & UiWidgetCapability.ACTIVABLE) === 0)
+                    {
+                        _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
+                        _activeWidget   = null as unknown as UiWidget;
+                        _activeWidgetId = -1;
+                    }
+                }
+            }
+        }
+
+        if (event_is_keyboard(event) &&
+            event.isPressed          &&
+            _activeWidgetId !== -1   &&
+            (_activeWidget.capabilities & UiWidgetCapability.TEXT)
+           )
+        {
+            hasEventBeenProcessed = _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.TEXT, event);
+        }
+    }
+
+
+    return hasEventBeenProcessed;
+}
+
+
+////////////////////////////////////////////////////////////
+export function gui_prepare_new_frame()
+{
+    _activeWidgetIdLastFrame = _activeWidgetId;
+    _currentFrameWidget.splice(0, _currentFrameWidget.length);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////
+// MARK: WIDGET ID
+////////////////////////////////////////////////////////////
+function _caller_info(): string
+{
+    const err = new Error();
+    if (!err.stack) return "";
+
+    const stackLines = err.stack.split('\n');
+    const callerLine = stackLines[2].trim();
+
+    return callerLine;
+}
+
+
+////////////////////////////////////////////////////////////
+function _hash_string(str: string): number
+{
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i); // hash * 33 + c
+  }
+  return hash >>> 0;
+}
+
+
+////////////////////////////////////////////////////////////
+export function widget_id(i: number = 0): number
+{
+  const callerLocation = _caller_info();
+  const seed = `${callerLocation}#${i}`;
+  return _hash_string(seed);
+}
+
+
+
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////
+// MARK: WIDGET HELPER
+////////////////////////////////////////////////////////////
+export function widget_context_of(widget: UiWidget): UiContext
+{
+    let context = _contexts.get(widget.id);
+    if (context === undefined) return get_context();
+    return context;
+}
+
+
+////////////////////////////////////////////////////////////
+export function widget_deactivate(widgetId: number)
+{
+    if (_activeWidgetId === widgetId)
+    {
+        _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
+        _activeWidget   = null as unknown as UiWidget;
+        _activeWidgetId = -1;
+    }
+}
+
+
+////////////////////////////////////////////////////////////
+export function widget_activate(widget: UiWidget)
+{
+    if (_activeWidgetId !== widget.id)
+    {
+        if (_activeWidgetId !== -1)
+            _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
+
+        _activeWidget   = widget;
+        _activeWidgetId = widget.id;
+        _activeWidget.proc(_activeWidget, UiWidgetInternalEvent.ACTIVATION, null);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////
+// MARK: WIDGET LOGIC
+////////////////////////////////////////////////////////////
+export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidgetCapability)
+{
+    let hasBeenCreatedThisFrame  : boolean = false;
+    let doesThisWidgetNeedContext: boolean = false;
+
+    let widget: UiWidget =
+    {
+        id  : id,
+        rect: rect_copy(rect),
+        z   : z,
+
+        capabilities: capabilities,
+        state       : 0,
+
+        text: null as unknown as string,
+
+        proc: _ui_no_proc
+    };
+
+    if (doesThisWidgetNeedContext)
+    {
+        if (_contexts.has(id) === false)
+        {
+            let context = get_context();
+            _contexts.set(id, context);
+            hasBeenCreatedThisFrame = true;
+        }
+        else
+        {
+            let context = _contexts.get(id) as UiContext;
+            widget.text = context.text;
+        }
+    }
+
+    if (widget.id === _activeWidgetId)  widget.state |= UiWidgetState.GRABBED;
+    if (widget.id === _hoveredWidgetId) widget.state |= UiWidgetState.HOVERED;
+    if (widget.id === _clickedWidgetId) widget.state |= UiWidgetState.CLICKED;
+    if (hasBeenCreatedThisFrame)        widget.state |= UiWidgetState.CREATED_THIS_FRAME;
+
+    if (widget.id === _activeWidgetIdLastFrame && widget.id !== _activeWidgetId) widget.state |= UiWidgetState.DEACTIVATED_THIS_FRAME;
+    if (widget.id !== _activeWidgetIdLastFrame && widget.id === _activeWidgetId) widget.state |= UiWidgetState.ACTIVATED_THIS_FRAME;
+
+    if (capabilities & UiWidgetCapability.CLICKABLE)
+        if (widget.state & UiWidgetState.HOVERED)
+        {
+            cursor_set(MouseCursor.POINTER);
+        }
+
+    _currentFrameWidget.push(widget);
+
+    return widget;
+}
+
+
+
+
+
+
+
+export function gui_button(id: number, rect: Rect, z: number)
+{
+    let widget: UiWidget =
+    {
+        id  : id,
+        rect: rect,
+        z   : z,
+
+        capabilities: UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE,
+        state       : 0,
+
+        text: null as unknown as string,
+
+        proc: _ui_no_proc
+    };
+
+    if (widget.id === _activeWidgetId)  widget.state |= UiWidgetState.GRABBED;
+    if (widget.id === _hoveredWidgetId) widget.state |= UiWidgetState.HOVERED;
+    if (widget.id === _clickedWidgetId) widget.state |= UiWidgetState.CLICKED;
+
+    _currentFrameWidget.push(widget);
+
+    return widget;
+}
+
+
+
+
+////////////////////////////////////////////////////////////
+function _text_input_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event: GameEvent | null): boolean
+{
+    let context               = _contexts.get(widget.id);
+    let hasEventBeenProcessed = false;
+
+    if (context === undefined)
+    {
+        console.error(`Text input id [${widget.id}] does not have a context`);
+        return false;
+    }
+
+
+    if (eventType === UiWidgetInternalEvent.ACTIVATION)
+    {
+        context.cursorPosition    = context.text.length;
+        context.selectionPosition = -1;
+
+        hasEventBeenProcessed = true;
+    }
+
+    else if (eventType === UiWidgetInternalEvent.CLICKED)
+    {
+        let localMouseX = mouseX - (widget.rect.x + context.offsetX);
+        let localMouseY = mouseY - (widget.rect.y + context.offsetY);
+
+        context.cursorPosition    = Math.floor(localMouseX / (6*context.scale));
+        context.selectionPosition = -1;
+
+        hasEventBeenProcessed = true;
+    }
+
+    else if (eventType === UiWidgetInternalEvent.DE_ACTIVATION)
+    {
+        context.cursorPosition    = -1;
+        context.selectionPosition = -1;
+    }
+
+    else if (eventType === UiWidgetInternalEvent.TEXT)
+    {
+        if (event === null)
+        {
+            console.error(`Text input id [${widget.id}] cannot process a null TEXT event`);
+            return false;
+        }
+
+        if (event.isPressed)
+        {
+            if (event.key === GameEventKey.ARROW_LEFT)
+            {
+                context.cursorPosition -= 1;
+                hasEventBeenProcessed = true;
+            }
+
+            else if (event.key === GameEventKey.ARROW_RIGHT)
+            {
+                context.cursorPosition += 1;
+                hasEventBeenProcessed = true;
+            }
+
+            else if (event.key === GameEventKey.BACKSPACE)
+            {
+                if (context.cursorPosition > 0)
+                {
+                    context.text = context.text.slice(0, context.cursorPosition-1) + context.text.slice(context.cursorPosition);
+                    context.cursorPosition -= 1;
+                }
+
+                hasEventBeenProcessed = true;
+            }
+
+            else if (event_is_printable(event))
+            {
+                if (context.cursorPosition >= 0)
+                {
+                    context.text = context.text.slice(0, context.cursorPosition) + String.fromCharCode(event.key) + context.text.slice(context.cursorPosition);
+                    context.cursorPosition += 1;
+                }
+
+                hasEventBeenProcessed = true;
+            }
+
+        }
+    }
+
+
+    if (hasEventBeenProcessed)
+    {
+        if (context.cursorPosition < 0)                   context.cursorPosition = 0;
+        if (context.cursorPosition > context.text.length) context.cursorPosition = context.text.length;
+
+        let cursorX = context.offsetX  +  6 * context.scale * context.cursorPosition;
+        let offsetX = context.offsetX;
+
+        if (cursorX < 0)                 offsetX -= cursorX;
+        if (cursorX > widget.rect.width) offsetX -= (cursorX - widget.rect.width) + context.scale;
+
+        context.offsetX = offsetX;
+    }
+
+    return hasEventBeenProcessed;
+}
+
+
+////////////////////////////////////////////////////////////
+export function gui_text_input(id: number, rect: Rect, z: number, s: string)
+{
+    let hasBeenCreatedThisFrame: boolean   = false;
+    let context                : UiContext = null as unknown as UiContext;
+
+    if (_contexts.has(id) === false)
+    {
+        context      = get_context();
+        context.text  = s;
+        context.scale = 4;
+        _contexts.set(id, context);
+        hasBeenCreatedThisFrame = true;
+    }
+    else
+    {
+        context = _contexts.get(id) as UiContext;
+    }
+
+    let widget: UiWidget =
+    {
+        id  : id,
+        rect: rect,
+        z   : z,
+
+        capabilities: UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE | UiWidgetCapability.ACTIVABLE | UiWidgetCapability.TEXT,
+        state       : 0,
+
+        text: context.text,
+
+        proc: _text_input_proc
+    };
+
+    if (widget.id === _activeWidgetId)  widget.state |= UiWidgetState.GRABBED;
+    if (widget.id === _hoveredWidgetId) widget.state |= UiWidgetState.HOVERED;
+    if (widget.id === _clickedWidgetId) widget.state |= UiWidgetState.CLICKED;
+    if (hasBeenCreatedThisFrame)        widget.state |= UiWidgetState.CREATED_THIS_FRAME;
+
+    if (widget.id === _activeWidgetIdLastFrame && widget.id !== _activeWidgetId) widget.state |= UiWidgetState.DEACTIVATED_THIS_FRAME;
+    if (widget.id !== _activeWidgetIdLastFrame && widget.id === _activeWidgetId) widget.state |= UiWidgetState.ACTIVATED_THIS_FRAME;
+
+    _currentFrameWidget.push(widget);
+
+    return widget;
+}
+
+
+
+////////////////////////////////////////////////////////////
+export function gui_text_input_draw(widget: UiWidget)
+{
+    let context = widget_context_of(widget);
+
+    let x     = widget.rect.x + context.offsetX;
+    let y     = widget.rect.y;
+    let z     = widget.z;
+    let text  = widget.text;
+    let scale = context.scale;
+
+    renderer_scissor_push(widget.rect);
+    draw_quad(widget.rect, z, to_color(0, 0, 0, 1));
+
+
+    for (let i=0; i < text.length ;i+=1)
+    {
+        font_draw_ascii(x, y, z+1, _defaultFont, scale, text[i]);
+
+        if (i === context.cursorPosition)
+        {
+            let cursorRect = to_rect(x, y, scale, scale*10);
+            draw_quad(cursorRect, z+2, to_color(1, 0, 0, 1));
+        }
+
+        x += scale*6;
+    }
+
+    if (context.cursorPosition >= text.length)
+    {
+        let cursorRect = to_rect(x, y, scale, scale*10);
+        draw_quad(cursorRect, z+2, to_color(1, 0, 0, 1));
+    }
+
+    renderer_scissor_pop();
+}
