@@ -46,8 +46,9 @@ const enum UiWidgetInternalEvent
     DE_ACTIVATION = 2,
 
     DELTA_MOUSE = 3,
-    CLICKED     = 4,
-    TEXT        = 5,
+    UN_GRABBED  = 4,
+    CLICKED     = 5,
+    TEXT        = 6,
 }
 
 
@@ -225,6 +226,11 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
                             _clickedWidgetId = _hoveredWidgetId;
                         }
 
+                        if (_activeWidget.capabilities & UiWidgetCapability.GRABBABLE)
+                        {
+                            _widget_proc(_activeWidget, UiWidgetInternalEvent.UN_GRABBED, null);
+                        }
+
                         if ((_activeWidget.capabilities & UiWidgetCapability.ACTIVABLE) === 0)
                         {
                             _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
@@ -327,6 +333,11 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             context.cursorPosition = _find_cursor_position(text, font, context.scale, localMouseX, localMouseY);
         }
 
+        else if (eventType === UiWidgetInternalEvent.UN_GRABBED)
+        {
+            if (context.cursorPosition === context.selectionPosition) context.selectionPosition = -1;
+        }
+
         else if (eventType === UiWidgetInternalEvent.TEXT)
         {
             console.log("Text TEXT");
@@ -398,10 +409,19 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                 else if (event.key === GameEventKey.BACKSPACE)
                 {
-                    if (context.cursorPosition > 0)
+                    let startOfDeletion = context.cursorPosition - 1;
+                    let endOfDeletion   = context.cursorPosition;
+
+                    if (context.selectionPosition !== -1)
                     {
-                        context.text = context.text.slice(0, context.cursorPosition-1) + context.text.slice(context.cursorPosition);
-                        context.cursorPosition -= 1;
+                        startOfDeletion = Math.min(context.selectionPosition, context.cursorPosition);
+                        endOfDeletion   = Math.max(context.selectionPosition, context.cursorPosition);
+                    }
+
+                    if (startOfDeletion >= 0)
+                    {
+                        context.text = _text_delete_insert(context.text, startOfDeletion, endOfDeletion, "");
+                        context.cursorPosition = startOfDeletion;
                     }
 
                     hasEventBeenProcessed = true;
@@ -691,10 +711,9 @@ function _find_cursor_position(s: string, font: MonoFont, scale: number, x: numb
 
 
 ////////////////////////////////////////////////////////////
-function _find_next_cursor_position(s: string, cursorPosition: number): number
+function _text_delete_insert(s: string, startOfDeletion: number, endOfDeteletion: number, insertion: string): string
 {
-
-
+    return s.slice(0, startOfDeletion) + insertion + s.slice(endOfDeteletion);
 }
 
 
