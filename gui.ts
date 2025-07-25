@@ -204,7 +204,7 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
                     {
                         if (_hoveredWidgetId !== _activeWidgetId)
                             _widget_proc(_hoveredWidget, UiWidgetInternalEvent.ACTIVATION, null);
-                        _widget_proc(_hoveredWidget, UiWidgetInternalEvent.CLICKED, null);
+                        _widget_proc(_hoveredWidget, UiWidgetInternalEvent.CLICKED, event);
                         _activeWidget         = _hoveredWidget;
                         _activeWidgetId       = _hoveredWidgetId;
                         _isGrabbing           = true;
@@ -308,11 +308,26 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
         else if (eventType === UiWidgetInternalEvent.CLICKED)
         {
+            console.assert(event !== null);
+
             console.log("Text CLICKED");
             let localMouseX = mouseX - (widget.rect.x + context.offsetX);
             let localMouseY = mouseY - (widget.rect.y + context.offsetY);
-            context.cursorPosition    = _find_cursor_position(text, font, context.scale, localMouseX, localMouseY);
-            context.selectionPosition = context.cursorPosition;
+
+            // @ts-ignore
+            if ((event.modifier & GameEventModifier.SHIFT) === GameEventModifier.SHIFT &&
+                context.cursorPosition !== -1)
+            {
+                if (context.selectionPosition === -1)
+                    context.selectionPosition = context.cursorPosition;
+                context.cursorPosition = _find_cursor_position(text, font, context.scale, localMouseX, localMouseY);
+            }
+            else
+            {
+                context.cursorPosition    = _find_cursor_position(text, font, context.scale, localMouseX, localMouseY);
+                context.selectionPosition = context.cursorPosition;
+            }
+
             hasEventBeenProcessed = true;
         }
 

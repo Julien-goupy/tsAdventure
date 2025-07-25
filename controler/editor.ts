@@ -57,7 +57,7 @@ function tab_draw_text(rect: Rect, tab: FileSystemItem, forceActivate: boolean =
         let widgetContext = widget_context_of(widget);
         widget_context_set_text(widgetContext, text);
         widget.text = text;
-        widgetContext.scale = 3;
+        widgetContext.scale = 2;
     }
 
     gui_draw_text_editor(widget);
