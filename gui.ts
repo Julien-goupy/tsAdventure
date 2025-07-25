@@ -1,4 +1,4 @@
-import { event_is_keyboard, event_is_printable, GameEvent, GameEventKey, GameEventType, mouseX, mouseY } from "./event";
+import { event_is_keyboard, event_is_printable, GameEvent, GameEventKey, GameEventModifier, GameEventType, mouseX, mouseY } from "./event";
 import {_defaultFont, font_draw_ascii, MonoFont} from "./font";
 import { draw_quad, draw_text, Rect, rect_contain, renderer_scissor_pop, renderer_scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
 
@@ -340,13 +340,59 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             {
                 if (event.key === GameEventKey.ARROW_LEFT)
                 {
-                    context.cursorPosition -= 1;
+                    if (event.modifier & GameEventModifier.SHIFT)
+                    {
+                        if (context.selectionPosition === -1)
+                        {
+                            context.selectionPosition = context.cursorPosition;
+                        }
+
+                        context.cursorPosition -= 1;
+                    }
+                    else
+                    {
+                        if (context.selectionPosition !== -1)
+                        {
+                            context.cursorPosition = Math.min(context.cursorPosition, context.selectionPosition);
+                            context.selectionPosition = -1;
+                        }
+                        else
+                        {
+                            context.cursorPosition -= 1;
+                        }
+                    }
+
+                    if (context.cursorPosition < 0) context.cursorPosition = 0;
+
                     hasEventBeenProcessed = true;
                 }
 
                 else if (event.key === GameEventKey.ARROW_RIGHT)
                 {
-                    context.cursorPosition += 1;
+                    if (event.modifier & GameEventModifier.SHIFT)
+                    {
+                        if (context.selectionPosition === -1)
+                        {
+                            context.selectionPosition = context.cursorPosition;
+                        }
+
+                        context.cursorPosition += 1;
+                    }
+                    else
+                    {
+                        if (context.selectionPosition !== -1)
+                        {
+                            context.cursorPosition = Math.max(context.cursorPosition, context.selectionPosition);
+                            context.selectionPosition = -1;
+                        }
+                        else
+                        {
+                            context.cursorPosition += 1;
+                        }
+                    }
+
+                    if (context.cursorPosition > context.text.length) context.cursorPosition = context.text.length;
+
                     hasEventBeenProcessed = true;
                 }
 
