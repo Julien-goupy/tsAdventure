@@ -407,9 +407,35 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                     hasEventBeenProcessed = true;
                 }
 
-                else if (event.key === GameEventKey.BACKSPACE)
+                else if (event.key === GameEventKey.BACKSPACE || event.key === GameEventKey.DELETE)
                 {
                     let startOfDeletion = context.cursorPosition - 1;
+                    let endOfDeletion   = context.cursorPosition;
+                    if (event.key === GameEventKey.DELETE)
+                    {
+                        startOfDeletion = context.cursorPosition;
+                        endOfDeletion   = context.cursorPosition + 1;
+                    }
+
+                    if (context.selectionPosition !== -1)
+                    {
+                        startOfDeletion = Math.min(context.selectionPosition, context.cursorPosition);
+                        endOfDeletion   = Math.max(context.selectionPosition, context.cursorPosition);
+                    }
+
+                    if (startOfDeletion >= 0 && startOfDeletion < text.length)
+                    {
+                        context.text = _text_delete_insert(text, startOfDeletion, endOfDeletion, "");
+                        context.cursorPosition = startOfDeletion;
+                    }
+
+                    context.selectionPosition = -1;
+                    hasEventBeenProcessed     = true;
+                }
+
+                else if (event_is_printable(event))
+                {
+                    let startOfDeletion = context.cursorPosition;
                     let endOfDeletion   = context.cursorPosition;
 
                     if (context.selectionPosition !== -1)
@@ -418,24 +444,11 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         endOfDeletion   = Math.max(context.selectionPosition, context.cursorPosition);
                     }
 
-                    if (startOfDeletion >= 0)
-                    {
-                        context.text = _text_delete_insert(context.text, startOfDeletion, endOfDeletion, "");
-                        context.cursorPosition = startOfDeletion;
-                    }
+                    context.text = _text_delete_insert(text, startOfDeletion, endOfDeletion, String.fromCharCode(event.key));
+                    context.cursorPosition = startOfDeletion + 1;
 
-                    hasEventBeenProcessed = true;
-                }
-
-                else if (event_is_printable(event))
-                {
-                    if (context.cursorPosition >= 0)
-                    {
-                        context.text = context.text.slice(0, context.cursorPosition) + String.fromCharCode(event.key) + context.text.slice(context.cursorPosition);
-                        context.cursorPosition += 1;
-                    }
-
-                    hasEventBeenProcessed = true;
+                    context.selectionPosition = -1;
+                    hasEventBeenProcessed     = true;
                 }
 
                 else if (event.key === GameEventKey.ENTER)

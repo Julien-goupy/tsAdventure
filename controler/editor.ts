@@ -207,7 +207,7 @@ function init()
             id      : widget_id(),
             children: [],
             parent  : d0,
-            data    : "Hello, Sailor!\nI am a multi line text\nBlip Bloup",
+            data    : "Hello, Sailor!\nI am a multi line text\nBlip Bloup\nThis is an average line\nThis is a long long long long long line\nThis is short\nI Do nOT kNoW",
         };
         d0.children.push(f0);
 
