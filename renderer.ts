@@ -826,6 +826,7 @@ export function renderer_scissor_push(r: Rect)
     let newScissor = rect_intersection(topOfScissorStack, r);
 
     _scissors.push(newScissor);
+    // OpenGL coord are fucked up.....
     _gl.scissor(newScissor.x, _canvas.height - newScissor.y - newScissor.height, newScissor.width, newScissor.height);
 }
 
@@ -844,7 +845,7 @@ export function renderer_scissor_pop()
     else
     {
         let r = _scissors[_scissors.length - 1];
-        _gl.scissor(r.x, r.y, r.width, r.height);
+        _gl.scissor(r.x, _canvas.height - r.y - r.height, r.width, r.height);
     }
 }
 
