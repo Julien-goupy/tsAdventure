@@ -45,8 +45,9 @@ const enum UiWidgetInternalEvent
     ACTIVATION    = 1,
     DE_ACTIVATION = 2,
 
-    CLICKED = 4,
-    TEXT    = 5,
+    DELTA_MOUSE = 3,
+    CLICKED     = 4,
+    TEXT        = 5,
 }
 
 
@@ -71,6 +72,10 @@ interface UiContext
     // select
     selected: number[];
 
+    // Grabbing
+    deltaMouseX: number;
+    deltaMouseY: number;
+
     // Text
     font             : MonoFont;
     scale            : number;
@@ -89,6 +94,8 @@ let _hoveredWidgetZ         : number                 = -1;
 let _hoveredWidgetId        : number                 = -1;
 let _hoveredWidget          : UiWidget               = null as unknown as UiWidget;
 let _isGrabbing             : boolean                = false;
+let _mouseClickedX          : number                 = -1;
+let _mouseClickedY          : number                 = -1;
 let _activeWidgetId         : number                 = -1;
 let _activeWidgetIdLastFrame: number                 = -1;
 let _activeWidget           : UiWidget               = null as unknown as UiWidget;
@@ -105,6 +112,8 @@ function get_context(): UiContext
     return {
         isOn             : false,
         selected         : null as unknown as number[],
+        deltaMouseX      : 0,
+        deltaMouseY      : 0,
         font             : _defaultFont,
         scale            : 1,
         text             : null as unknown as string,
@@ -195,15 +204,19 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
                         if (_hoveredWidgetId !== _activeWidgetId)
                             _widget_proc(_hoveredWidget, UiWidgetInternalEvent.ACTIVATION, null);
                         _widget_proc(_hoveredWidget, UiWidgetInternalEvent.CLICKED, null);
-                        _activeWidget   = _hoveredWidget;
-                        _activeWidgetId = _hoveredWidgetId;
+                        _activeWidget         = _hoveredWidget;
+                        _activeWidgetId       = _hoveredWidgetId;
                         _isGrabbing           = true;
+                        _mouseClickedX        = mouseX;
+                        _mouseClickedY        = mouseY;
                         hasEventBeenProcessed = true;
                     }
                 }
                 else
                 {
-                    _isGrabbing = false;
+                    _mouseClickedX = -1;
+                    _mouseClickedY = -1;
+                    _isGrabbing    = false;
 
                     if (_activeWidgetId !== -1 && (_activeWidget.capabilities & UiWidgetCapability.CLICKABLE) === UiWidgetCapability.CLICKABLE)
                     {
@@ -236,6 +249,18 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
             unProcessedEvents.push(event);
 
     }
+
+    if (_isGrabbing            &&
+        _activeWidget !== null &&
+        (_activeWidget.capabilities & UiWidgetCapability.GRABBABLE))
+    {
+        let context = widget_context_of(_activeWidget);
+        context.deltaMouseX = mouseX - _mouseClickedX;
+        context.deltaMouseY = mouseY - _mouseClickedY;
+        _widget_proc(_activeWidget, UiWidgetInternalEvent.DELTA_MOUSE, null);
+    }
+
+
 
     return unProcessedEvents;
 }
@@ -280,8 +305,8 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             console.log("Text CLICKED");
             let localMouseX = mouseX - (widget.rect.x + context.offsetX);
             let localMouseY = mouseY - (widget.rect.y + context.offsetY);
-            context.cursorPosition = _find_cursor_position(text, font, context.scale, localMouseX, localMouseY);
-            context.selectionPosition = -1;
+            context.cursorPosition    = _find_cursor_position(text, font, context.scale, localMouseX, localMouseY);
+            context.selectionPosition = context.cursorPosition;
             hasEventBeenProcessed = true;
         }
 
@@ -293,6 +318,13 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                 context.cursorPosition    = -1;
                 context.selectionPosition = -1;
             }
+        }
+
+        else if (eventType === UiWidgetInternalEvent.DELTA_MOUSE)
+        {
+            let localMouseX = mouseX - (widget.rect.x + context.offsetX);
+            let localMouseY = mouseY - (widget.rect.y + context.offsetY);
+            context.cursorPosition = _find_cursor_position(text, font, context.scale, localMouseX, localMouseY);
         }
 
         else if (eventType === UiWidgetInternalEvent.TEXT)
@@ -564,10 +596,6 @@ export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidg
         }
     }
 
-    if (_isGrabbing && (widget.capabilities & UiWidgetCapability.GRABBABLE))
-    {
-    }
-
     _currentFrameWidget.push(widget);
 
     return widget;
@@ -639,14 +667,27 @@ export const enum GuiTextEditorOption
 
 export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOption =GuiTextEditorOption.NONE)
 {
-    let context               = widget_context_of(widget);
-    let lines                 = widget.text.split("\n");
-    let x                     = widget.rect.x;
-    let y                     = widget.rect.y;
-    let font                  = _defaultFont;
-    let scale                 = context.scale;
-    let lineHeight            = scale * font.height;
-    let accumulatedTextLength = 0
+    let context                 = widget_context_of(widget);
+    let lines                   = widget.text.split("\n");
+    let x                       = widget.rect.x;
+    let y                       = widget.rect.y;
+    let font                    = _defaultFont;
+    let scale                   = context.scale;
+    let glyphWidth              = scale * font.width;
+    let lineHeight              = scale * font.height;
+    let accumulatedTextLength   = 0
+    let cursorPosition          = context.cursorPosition;
+    let selectionCursorPosition = context.selectionPosition;
+
+    let startOfSelection = -1;
+    let endOfSelection   = -1;
+    let isSelecting      = false;
+    if (selectionCursorPosition !== -1)
+    {
+        startOfSelection = Math.min(selectionCursorPosition, cursorPosition);
+        endOfSelection   = Math.max(selectionCursorPosition, cursorPosition);
+    }
+
 
     for (let i=0; i < lines.length ; i+=1)
     {
@@ -654,25 +695,49 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
         let j    = 0;
         for (; j < line.length ;j+=1)
         {
-            font_draw_ascii(x, y, widget.z + 1, font, scale, line[j]);
+            if (accumulatedTextLength === startOfSelection) isSelecting = true;
+            if (accumulatedTextLength === endOfSelection)   isSelecting = false;
 
-            if (accumulatedTextLength === context.cursorPosition)
+            if (isSelecting)
+                draw_quad(to_rect(x, y, glyphWidth, lineHeight), widget.z + 1, to_color(0, 0, 0.6, 1));
+
+            if (accumulatedTextLength === cursorPosition)
             {
                 let cursorRect = to_rect(x, y, scale, lineHeight);
-                draw_quad(cursorRect, widget.z + 2, to_color(1, 0, 0, 1));
+                draw_quad(cursorRect, widget.z + 3, to_color(1, 0, 0, 1));
             }
 
             accumulatedTextLength += 1;
             x += font.width * scale;
         }
 
-        if (accumulatedTextLength === context.cursorPosition)
+        if (accumulatedTextLength === cursorPosition)
         {
             let cursorRect = to_rect(x, y, scale, lineHeight);
             draw_quad(cursorRect, widget.z + 2, to_color(1, 0, 0, 1));
         }
 
+        if (accumulatedTextLength === startOfSelection) isSelecting = true;
+        if (accumulatedTextLength === endOfSelection)   isSelecting = false;
+
         accumulatedTextLength += 1;
+        y += lineHeight;
+        x = widget.rect.x;
+    }
+
+
+    x = widget.rect.x;
+    y = widget.rect.y;
+
+    for (let i=0; i < lines.length ; i+=1)
+    {
+        let line = lines[i];
+        let j    = 0;
+        for (; j < line.length ;j+=1)
+        {
+            font_draw_ascii(x, y, widget.z + 2, font, scale, line[j]);
+            x += font.width * scale;
+        }
         y += lineHeight;
         x = widget.rect.x;
     }

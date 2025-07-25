@@ -33,7 +33,7 @@ export function logic_set_controler(newControler: LogicControler) {
 
 ////////////////////////////////////////////////////////////
 export function game_render_one_frame() {
-    let startOfFrame = performance.now() / 1000.0;
+    let startOfFrame = performance.now();
 
     let [windowRect, windowWidthInPixel, windowHeightInPixel] = renderer_get_window_info();
     renderer_start_frame();
@@ -41,7 +41,7 @@ export function game_render_one_frame() {
     gui_init_frame();
 
     _lastFrameTime = _now;
-    _now = performance.now() / 1000.0;
+    _now = performance.now();
     let elapsedTime = _now - _lastFrameTime;
 
     events = gui_process_event(events);
@@ -55,8 +55,8 @@ export function game_render_one_frame() {
     renderer_immediate_flush();
     _frameId += 1;
 
-    let endOfFrame = performance.now() / 1000.0;
-    // console.log("Frame duration", endOfFrame - startOfFrame);
+    let endOfFrame = performance.now();
+    console.log("Frame duration", endOfFrame - startOfFrame);
 
     requestAnimationFrame(game_render_one_frame);
 }
