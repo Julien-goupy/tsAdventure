@@ -56,8 +56,6 @@ export function font_load(name: string): MonoFont
                 let width = glyphData.w * font.width;
                 let height = glyphData.h * font.height;
 
-                console.log(glyphData.utf32, glyphData.x, glyphData.y, glyphData.w, glyphData.h);
-
                 font.glyphs.set(glyphData.utf32, to_rect(x, y, width, height));
             }
         }
