@@ -261,45 +261,9 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
         else if (eventType === UiWidgetInternalEvent.CLICKED)
         {
             console.log("Text CLICKED");
-            // @Todo: put in a function
             let localMouseX = mouseX - (widget.rect.x + context.offsetX);
             let localMouseY = mouseY - (widget.rect.y + context.offsetY);
-            let cursorX     = Math.floor(localMouseX / (font.width *context.scale));
-            let cursorY     = Math.floor(localMouseY / (font.height*context.scale));
-
-            let startOfLine           = 0;
-            let endOfLine             = 0;
-            let lineNumber            = 0;
-
-            context.cursorPosition = -1;
-
-            while (endOfLine !== -1)
-            {
-                endOfLine = text.indexOf("\n", startOfLine);
-
-                if (lineNumber === cursorY)
-                {
-                    let endOfFileOffset = 0;
-                    if (endOfLine === -1)
-                    {
-                        endOfLine       = text.length - 1;
-                        endOfFileOffset = 1;
-                    }
-
-                    let line = text.substring(startOfLine, endOfLine);
-                    let cursorOffset = cursorX;
-                    if (cursorOffset > line.length) cursorOffset = line.length;
-                    context.cursorPosition = startOfLine + cursorOffset + endOfFileOffset;
-
-                    break;
-                }
-
-                startOfLine = endOfLine + 1;
-                lineNumber += 1;
-            }
-
-            if (context.cursorPosition === -1) context.cursorPosition = text.length;
-
+            context.cursorPosition = _find_cursor_position(text, font, context.scale, localMouseX, localMouseY);
             context.selectionPosition = -1;
             hasEventBeenProcessed = true;
         }
@@ -375,16 +339,16 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
         if (hasEventBeenProcessed)
         {
-            if (context.cursorPosition < 0)                   context.cursorPosition = 0;
-            if (context.cursorPosition > context.text.length) context.cursorPosition = context.text.length;
+            // if (context.cursorPosition < 0)                   context.cursorPosition = 0;
+            // if (context.cursorPosition > context.text.length) context.cursorPosition = context.text.length;
 
-            let cursorX = context.offsetX  + font.width * context.scale * context.cursorPosition;
-            let offsetX = context.offsetX;
+            // let cursorX = context.offsetX  + font.width * context.scale * context.cursorPosition;
+            // let offsetX = context.offsetX;
 
-            if (cursorX < 0)                 offsetX -= cursorX;
-            if (cursorX > widget.rect.width) offsetX -= (cursorX - widget.rect.width) + context.scale;
+            // if (cursorX < 0)                 offsetX -= cursorX;
+            // if (cursorX > widget.rect.width) offsetX -= (cursorX - widget.rect.width) + context.scale;
 
-            context.offsetX = offsetX;
+            // context.offsetX = offsetX;
         }
     }
 
@@ -595,6 +559,45 @@ export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidg
 ////////////////////////////////////////////////////////////
 // MARK: TEXT
 ////////////////////////////////////////////////////////////
+function _find_cursor_position(s: string, font: MonoFont, scale: number, x: number, y: number): number
+{
+    let cursorPosition = -1;
+    let glyphWidth     = font.width  * scale;
+    let lineHeight     = font.height * scale;
+    let cursorX        = Math.round(x / glyphWidth - 0.2);
+    let cursorY        = Math.floor(y / lineHeight);
+    let startOfLine    = 0;
+    let endOfLine      = 0;
+    let lineNumber     = 0;
+
+    while (endOfLine !== -1)
+    {
+        endOfLine = s.indexOf("\n", startOfLine);
+
+        if (lineNumber === cursorY)
+        {
+            if (endOfLine === -1)
+                endOfLine = s.length;
+
+            let line = s.substring(startOfLine, endOfLine);
+            let cursorOffset = cursorX;
+            if (cursorOffset > line.length) cursorOffset = line.length;
+            cursorPosition = startOfLine + cursorOffset;
+
+            break;
+        }
+
+        startOfLine = endOfLine + 1;
+        lineNumber += 1;
+    }
+
+    if (cursorPosition === -1) cursorPosition = s.length;
+    return cursorPosition;
+}
+
+
+
+
 export const enum GuiTextEditorOption
 {
     NONE             = 0,
