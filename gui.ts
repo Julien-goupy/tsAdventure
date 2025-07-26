@@ -448,6 +448,39 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                     hasEventBeenProcessed = true;
                 }
 
+                else if (event.key === GameEventKey.ARROW_UP)
+                {
+                    let [startOfLine, endOfLine] = _text_get_line_containing_cursor(text, context.cursorPosition);
+                    let offsetFromStartOfLine    = context.cursorPosition - startOfLine;
+                    let startOfPreviousLine      = 0;
+                    let cursorPositionOnNextLine = 0;
+
+                    if (startOfLine !== 0)
+                    {
+                        [startOfPreviousLine, endOfLine] = _text_get_line_containing_cursor(text, startOfLine - 1);
+                        cursorPositionOnNextLine = _text_get_cursor_or_end_of_line(text, startOfPreviousLine, offsetFromStartOfLine);
+                    }
+
+                    if (event.modifier & GameEventModifier.SHIFT)
+                    {
+                        if (context.selectionPosition === -1)
+                        {
+                            context.selectionPosition = context.cursorPosition;
+                        }
+
+                        context.cursorPosition = cursorPositionOnNextLine;
+                    }
+                    else
+                    {
+                        context.cursorPosition    = cursorPositionOnNextLine;
+                        context.selectionPosition = -1;
+                    }
+
+                    if (context.cursorPosition > context.text.length) context.cursorPosition = context.text.length;
+
+                    hasEventBeenProcessed = true;
+                }
+
                 else if (event.key === GameEventKey.BACKSPACE || event.key === GameEventKey.DELETE)
                 {
                     let startOfDeletion = context.cursorPosition - 1;
