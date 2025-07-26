@@ -1,3 +1,4 @@
+import {Platform, platform_get} from "./logic";
 import { _canvas, _gl, renderer_set_texture, Texture, TextureCreationEvent, TextureInterpolation } from "./renderer";
 
 export const enum GameEventType
@@ -14,6 +15,60 @@ export const enum GameEventKey
     NONE = -1,
 
     START_OF_KEYBOARD = 0,
+
+    _A = 65,
+    _B = 66,
+    _C = 67,
+    _D = 68,
+    _E = 69,
+    _F = 70,
+    _G = 71,
+    _H = 72,
+    _I = 73,
+    _J = 74,
+    _K = 75,
+    _L = 76,
+    _M = 77,
+    _N = 78,
+    _O = 79,
+    _P = 80,
+    _Q = 81,
+    _R = 82,
+    _S = 83,
+    _T = 84,
+    _U = 85,
+    _V = 86,
+    _W = 87,
+    _X = 88,
+    _Y = 89,
+    _Z = 90,
+
+    _a = 97,
+    _b = 98,
+    _c = 99,
+    _d = 100,
+    _e = 101,
+    _f = 102,
+    _g = 103,
+    _h = 104,
+    _i = 105,
+    _j = 106,
+    _k = 107,
+    _l = 108,
+    _m = 109,
+    _n = 110,
+    _o = 111,
+    _p = 112,
+    _q = 113,
+    _r = 114,
+    _s = 115,
+    _t = 116,
+    _u = 117,
+    _v = 118,
+    _w = 119,
+    _x = 120,
+    _y = 121,
+    _z = 122,
 
     ARROW_LEFT   = 256,
     ARROW_UP     = 257,
@@ -63,6 +118,7 @@ export const enum GameEventKey
     END_OF_MOUSE = 330,
 }
 
+
 export const enum GameEventModifier
 {
     NONE    = 0,
@@ -71,6 +127,10 @@ export const enum GameEventModifier
     ALT     = 1 << 2,
     META    = 1 << 3,
 }
+
+export const EVENT_COPY_PASTE_KEY = (platform_get() & Platform.APPLE) === Platform.APPLE?
+                                    GameEventModifier.META : GameEventModifier.CONTROL;
+
 
 
 export interface GameEvent

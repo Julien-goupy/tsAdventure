@@ -1,4 +1,4 @@
-import { event_is_keyboard, event_is_printable, GameEvent, GameEventKey, GameEventModifier, GameEventType, mouseX, mouseY } from "./event";
+import { clipboard_push, EVENT_COPY_PASTE_KEY, event_is_keyboard, event_is_printable, GameEvent, GameEventKey, GameEventModifier, GameEventType, mouseX, mouseY } from "./event";
 import {_defaultFont, font_draw_ascii, MonoFont} from "./font";
 import { draw_quad, draw_text, Rect, rect_contain, renderer_scissor_pop, renderer_scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
 
@@ -509,20 +509,37 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                 else if (event_is_printable(event))
                 {
-                    let startOfDeletion = context.cursorPosition;
-                    let endOfDeletion   = context.cursorPosition;
-
-                    if (context.selectionPosition !== -1)
+                    if ((event.modifier & EVENT_COPY_PASTE_KEY) &&
+                         (event.key === GameEventKey._C || event.key === GameEventKey._c))
                     {
-                        startOfDeletion = Math.min(context.selectionPosition, context.cursorPosition);
-                        endOfDeletion   = Math.max(context.selectionPosition, context.cursorPosition);
+                        let startOfCopy = Math.min(context.cursorPosition, context.selectionPosition);
+                        let endOfCopy   = Math.max(context.cursorPosition, context.selectionPosition);
+
+                        if (context.selectionPosition === -1 || startOfCopy === endOfCopy)
+                        {
+                            [startOfCopy, endOfCopy] = _text_get_line_containing_cursor(text, context.cursorPosition);
+                        }
+
+                        clipboard_push(text.substring(startOfCopy, endOfCopy));
+                    }
+                    else
+                    {
+                        let startOfDeletion = context.cursorPosition;
+                        let endOfDeletion   = context.cursorPosition;
+
+                        if (context.selectionPosition !== -1)
+                        {
+                            startOfDeletion = Math.min(context.selectionPosition, context.cursorPosition);
+                            endOfDeletion   = Math.max(context.selectionPosition, context.cursorPosition);
+                        }
+
+                        context.text = _text_delete_insert(text, startOfDeletion, endOfDeletion, String.fromCharCode(event.key));
+                        context.cursorPosition = startOfDeletion + 1;
+
+                        context.selectionPosition = -1;
                     }
 
-                    context.text = _text_delete_insert(text, startOfDeletion, endOfDeletion, String.fromCharCode(event.key));
-                    context.cursorPosition = startOfDeletion + 1;
-
-                    context.selectionPosition = -1;
-                    hasEventBeenProcessed     = true;
+                    hasEventBeenProcessed = true;
                 }
 
                 else if (event.key === GameEventKey.ENTER)
