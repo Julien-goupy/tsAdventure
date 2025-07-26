@@ -18,7 +18,7 @@ export const enum GameEventKey
     ARROW_LEFT   = 256,
     ARROW_UP     = 257,
     ARROW_RIGHT  = 258,
-    ARROW_BOTTOM = 259,
+    ARROW_DOWN = 259,
 
     TAB           = 260,
     ENTER         = 261,
@@ -170,7 +170,7 @@ export function event_init()
         else if (browserEvent.key === 'ArrowDown')
         {
             event.type = GameEventType.KEY;
-            event.key  = GameEventKey.ARROW_BOTTOM;
+            event.key  = GameEventKey.ARROW_DOWN;
         }
         else if (browserEvent.key === 'Tab')
         {
@@ -447,3 +447,23 @@ export function event_is_mouse(event: GameEvent): boolean
            (GameEventKey.END_OF_KEYBOARD <= event.key && event.key < GameEventKey.END_OF_MOUSE);
 }
 
+
+////////////////////////////////////////////////////////////
+export function clipboard_push(s: string)
+{
+    if (navigator.clipboard === undefined)
+    {
+        console.error("Clipboard not supported");
+    }
+    else
+    {
+        try
+        {
+            navigator.clipboard.writeText(s);
+        }
+        catch (error)
+        {
+            console.log(error.toString());
+        }
+    }
+};

@@ -422,6 +422,32 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                     hasEventBeenProcessed = true;
                 }
 
+                else if (event.key === GameEventKey.ARROW_DOWN)
+                {
+                    let [startOfLine, endOfLine] = _text_get_line_containing_cursor(text, context.cursorPosition);
+                    let offsetFromStartOfLine    = context.cursorPosition - startOfLine;
+                    let cursorPositionOnNextLine = _text_get_cursor_or_end_of_line(text, endOfLine+1, offsetFromStartOfLine);
+
+                    if (event.modifier & GameEventModifier.SHIFT)
+                    {
+                        if (context.selectionPosition === -1)
+                        {
+                            context.selectionPosition = context.cursorPosition;
+                        }
+
+                        context.cursorPosition = cursorPositionOnNextLine;
+                    }
+                    else
+                    {
+                        context.cursorPosition    = cursorPositionOnNextLine;
+                        context.selectionPosition = -1;
+                    }
+
+                    if (context.cursorPosition > context.text.length) context.cursorPosition = context.text.length;
+
+                    hasEventBeenProcessed = true;
+                }
+
                 else if (event.key === GameEventKey.BACKSPACE || event.key === GameEventKey.DELETE)
                 {
                     let startOfDeletion = context.cursorPosition - 1;
@@ -742,6 +768,30 @@ function _find_cursor_position(s: string, font: MonoFont, scale: number, x: numb
 function _text_delete_insert(s: string, startOfDeletion: number, endOfDeteletion: number, insertion: string): string
 {
     return s.slice(0, startOfDeletion) + insertion + s.slice(endOfDeteletion);
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_get_line_containing_cursor(s: string, cursorPosition: number): [number, number]
+{
+    let startOfLine = s.substring(0, cursorPosition).lastIndexOf("\n") + 1;
+    let endOfLine   = s.indexOf("\n", cursorPosition);
+
+    if (startOfLine === -1) startOfLine = 0;
+    if (endOfLine   === -1) endOfLine   = s.length;
+
+    return [startOfLine, endOfLine];
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_get_cursor_or_end_of_line(s: string, startOfLine: number, offset: number): number
+{
+    let endOfLine = s.indexOf("\n", startOfLine);
+    if (endOfLine === -1) endOfLine = s.length;
+    let lineCount = endOfLine - startOfLine;
+    if (offset > lineCount) offset = lineCount;
+    return startOfLine + offset;
 }
 
 
