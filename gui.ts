@@ -1,6 +1,8 @@
 import { clipboard_push, EVENT_COPY_PASTE_KEY, event_is_keyboard, event_is_printable, GameEvent, GameEventKey, GameEventModifier, GameEventType, mouseX, mouseY } from "./event";
 import { _defaultFont, font_draw_ascii, MonoFont } from "./font";
+import {_nowUs} from "./logic";
 import { draw_quad, Rect, rect_contain, scissor_pop, scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
+import { Rewinder, rewinder_add_mutation, rewinder_get, rewinder_pop_mutation, rewinder_redo_mutation, TextMutation } from "./rewind";
 import { char_is_identifier, char_is_space, string_count } from "./string";
 
 ////////////////////////////////////////////////////////////
@@ -71,16 +73,6 @@ export interface UiWidget
 
 interface UiContext
 {
-    // radio / checkbox
-    isOn: boolean;
-
-    // select
-    selected: number[];
-
-    // Grabbing
-    deltaMouseX: number;
-    deltaMouseY: number;
-
     // Text
     font             : MonoFont;
     scale            : number;
@@ -93,6 +85,9 @@ interface UiContext
     offsetX    : number;
     offsetY    : number;
     isScrolling: boolean;
+
+    // temp
+    rewinder: Rewinder;
 }
 
 
@@ -100,15 +95,14 @@ let _hoveredWidgetZ         : number                 = -1;
 let _hoveredWidgetId        : number                 = -1;
 let _hoveredWidget          : UiWidget               = null as unknown as UiWidget;
 let _isGrabbing             : boolean                = false;
-let _mouseClickedX          : number                 = -1;
-let _mouseClickedY          : number                 = -1;
 let _activeWidgetId         : number                 = -1;
 let _activeWidgetIdLastFrame: number                 = -1;
 let _activeWidget           : UiWidget               = null as unknown as UiWidget;
 let _currentFrameWidget     : UiWidget[]             = [];
 let _contexts               : Map<number, UiContext> = new Map();
 
-let _clickedWidgetId: number = -1;
+let _lastInteractionTimeUs: number = 0;
+let _clickedWidgetId      : number = -1;
 
 
 
@@ -116,10 +110,6 @@ let _clickedWidgetId: number = -1;
 function get_context(): UiContext
 {
     return {
-        isOn             : false,
-        selected         : null as unknown as number[],
-        deltaMouseX      : 0,
-        deltaMouseY      : 0,
         font             : _defaultFont,
         scale            : 1,
         text             : null as unknown as string,
@@ -129,6 +119,7 @@ function get_context(): UiContext
         offsetX          : 0,
         offsetY          : 0,
         isScrolling      : false,
+        rewinder         : rewinder_get()
     };
 }
 
@@ -211,19 +202,16 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
                         if (_hoveredWidgetId !== _activeWidgetId)
                             _widget_proc(_hoveredWidget, UiWidgetInternalEvent.ACTIVATION, null);
                         _widget_proc(_hoveredWidget, UiWidgetInternalEvent.CLICKED, event);
-                        _activeWidget         = _hoveredWidget;
-                        _activeWidgetId       = _hoveredWidgetId;
-                        _isGrabbing           = true;
-                        _mouseClickedX        = mouseX;
-                        _mouseClickedY        = mouseY;
-                        hasEventBeenProcessed = true;
+                        _activeWidget          = _hoveredWidget;
+                        _activeWidgetId        = _hoveredWidgetId;
+                        _isGrabbing            = true;
+                        hasEventBeenProcessed  = true;
+                        _lastInteractionTimeUs = _nowUs;
                     }
                 }
                 else
                 {
-                    _mouseClickedX = -1;
-                    _mouseClickedY = -1;
-                    _isGrabbing    = false;
+                    _isGrabbing = false;
 
                     if (_activeWidgetId !== -1 && (_activeWidget.capabilities & UiWidgetCapability.CLICKABLE) === UiWidgetCapability.CLICKABLE)
                     {
@@ -266,6 +254,7 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
                 (_activeWidget.capabilities & UiWidgetCapability.TEXT)
             )
             {
+                _lastInteractionTimeUs = _nowUs;
                 hasEventBeenProcessed = _widget_proc(_activeWidget, UiWidgetInternalEvent.TEXT, event);
             }
         }
@@ -279,9 +268,7 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
         _activeWidget !== null &&
         (_activeWidget.capabilities & UiWidgetCapability.GRABBABLE))
     {
-        let context = widget_context_of(_activeWidget);
-        context.deltaMouseX = mouseX - _mouseClickedX;
-        context.deltaMouseY = mouseY - _mouseClickedY;
+        _lastInteractionTimeUs = _nowUs;
         _widget_proc(_activeWidget, UiWidgetInternalEvent.DELTA_MOUSE, null);
     }
 
@@ -336,7 +323,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
         {
             console.assert(event !== null);
 
-            console.log("Text CLICKED");
+            // console.log("Text CLICKED");
             let localMouseX = mouseX - (widget.rect.x + context.offsetX);
             let localMouseY = mouseY - (widget.rect.y + context.offsetY);
 
@@ -427,7 +414,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
         else if (eventType === UiWidgetInternalEvent.TEXT)
         {
-            console.log("Text TEXT");
+            // console.log("Text TEXT");
             if (event === null)
             {
                 console.error(`Text input id [${widget.id}] cannot process a null TEXT event`);
@@ -598,6 +585,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                     if (startOfDeletion >= 0 && startOfDeletion < text.length)
                     {
+                        _text_push_mutation(context.rewinder, text, startOfDeletion, endOfDeletion, "");
                         context.text = _text_delete_insert(text, startOfDeletion, endOfDeletion, "");
                         context.cursorPosition = startOfDeletion;
                     }
@@ -657,12 +645,41 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                         let textToCut = text.substring(startOfCopy, endOfCopy)
                         clipboard_push(textToCut);
+                        _text_push_mutation(context.rewinder, text, startOfCopy, endOfCopy, "");
                         context.text              = _text_delete_insert(text, startOfCopy, endOfCopy, "");
                         context.cursorPosition    = startOfCopy;
                         context.selectionPosition = -1;
 
                         context.countOfLine -= string_count(textToCut, "\n");
                     }
+
+                    else if ((event.modifier & EVENT_COPY_PASTE_KEY) &&
+                        (event.key === GameEventKey._Z || event.key === GameEventKey._z))
+                    {
+                        if (event.modifier & GameEventModifier.SHIFT)
+                        {
+                            let mutation = rewinder_redo_mutation(context.rewinder);
+                            if (mutation !== null)
+                            {
+                                context.text           = _text_delete_insert(text, mutation.cursor,  mutation.cursor + mutation.deletedText.length, mutation.insertedText);
+                                context.cursorPosition = mutation.cursor + mutation.insertedText.length;
+                            }
+                        }
+                        else
+                        {
+                            let mutation = rewinder_pop_mutation(context.rewinder);
+                            if (mutation !== null)
+                            {
+
+                                context.text           = _text_delete_insert(text, mutation.cursor, mutation.cursor + mutation.insertedText.length, mutation.deletedText);
+                                context.cursorPosition = mutation.cursor + mutation.deletedText.length;
+                            }
+                        }
+
+                        context.selectionPosition = -1;
+                        hasEventBeenProcessed     = true;
+                    }
+
                     else
                     {
                         let startOfDeletion = context.cursorPosition;
@@ -683,6 +700,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         if (event.key === GameEventKey.TAB)
                             textToInsert = "    ";
 
+                        _text_push_mutation(context.rewinder, text, startOfDeletion, endOfDeletion, textToInsert);
                         context.text = _text_delete_insert(text, startOfDeletion, endOfDeletion, textToInsert);
                         context.cursorPosition = startOfDeletion + textToInsert.length;
 
@@ -697,6 +715,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                 {
                     if (context.cursorPosition >= 0)
                     {
+                        _text_push_mutation(context.rewinder, text, context.cursorPosition, context.cursorPosition, "\n");
                         context.text = context.text.slice(0, context.cursorPosition) + "\n" + context.text.slice(context.cursorPosition);
                         context.cursorPosition += 1;
                     }
@@ -989,6 +1008,23 @@ function _text_delete_insert(s: string, startOfDeletion: number, endOfDeteletion
 
 
 ////////////////////////////////////////////////////////////
+function _text_push_mutation(rewinder: Rewinder, s: string, startOfDeletion: number, endOfDeteletion: number, insertion: string)
+{
+    let mutation: TextMutation =
+    {
+        cursor      : startOfDeletion,
+        deletedText : s.substring(startOfDeletion, endOfDeteletion),
+        insertedText: insertion.substring(0)
+    };
+    rewinder_add_mutation(rewinder, mutation);
+}
+
+
+
+
+
+
+////////////////////////////////////////////////////////////
 function _text_get_line_containing_cursor(s: string, cursorPosition: number): [number, number]
 {
     let startOfLine = s.substring(0, cursorPosition).lastIndexOf("\n") + 1;
@@ -1061,16 +1097,17 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
     let offsetY                 = context.offsetY;
     let lines                   = widget.text.split("\n");
     let rect                    = widget.rect;
-    let x                       = rect.x + offsetX;
+    let scale                   = context.scale;
+    let startingX               = rect.x + offsetX + scale;
+    let x                       = startingX;
     let y                       = rect.y + offsetY;
     let font                    = _defaultFont;
-    let scale                   = context.scale;
     let glyphWidth              = scale * font.width;
     let lineHeight              = scale * font.height;
     let accumulatedTextLength   = 0
     let cursorPosition          = context.cursorPosition;
     let selectionCursorPosition = context.selectionPosition;
-
+    let shouldShowCursor        = (Math.round((_nowUs - _lastInteractionTimeUs) / 500_000) & 1) === 0;
 
     let startOfSelection = -1;
     let endOfSelection   = -1;
@@ -1095,9 +1132,9 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
             if (isSelecting)
                 draw_quad(to_rect(x, y, glyphWidth, lineHeight), widget.z + 1, SELECTION_COLOR);
 
-            if (accumulatedTextLength === cursorPosition)
+            if (shouldShowCursor && accumulatedTextLength === cursorPosition)
             {
-                let cursorRect = to_rect(x, y, scale, lineHeight);
+                let cursorRect = to_rect(x-1, y, scale, lineHeight);
                 draw_quad(cursorRect, widget.z + 3, CURSOR_COLOR);
             }
 
@@ -1105,9 +1142,9 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
             x += glyphWidth;
         }
 
-        if (accumulatedTextLength === cursorPosition)
+        if (shouldShowCursor && accumulatedTextLength === cursorPosition)
         {
-            let cursorRect = to_rect(x, y, scale, lineHeight);
+            let cursorRect = to_rect(x - 1, y, scale, lineHeight);
             draw_quad(cursorRect, widget.z + 2, CURSOR_COLOR);
         }
 
@@ -1116,11 +1153,11 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
 
         accumulatedTextLength += 1;
         y += lineHeight;
-        x = rect.x + offsetX;
+        x = startingX;
     }
 
 
-    x = rect.x + offsetX;
+    x = startingX;
     y = rect.y + offsetY;
 
     for (let i=0; i < lines.length ; i+=1)
@@ -1133,7 +1170,7 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
             x += glyphWidth;
         }
         y += lineHeight;
-        x = rect.x + offsetX;
+        x = startingX;
     }
 
     scissor_pop();

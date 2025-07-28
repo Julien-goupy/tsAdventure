@@ -53,9 +53,11 @@ export interface LogicControler
 
 
 let _currentControler = null as unknown as LogicControler;
-let _now              = 0;
-let _lastFrameTime    = 0;
+let _lastFrameTimeUs  = 0;
 let _frameId          = 0;
+export let _timeAtProgramStartUs = 0;
+export let _nowUs                = 0;
+export let _elapsedTimeUs        = 0;
 
 
 ////////////////////////////////////////////////////////////
@@ -65,37 +67,38 @@ export function logic_set_controler(newControler: LogicControler)
     if (_currentControler !== null) _currentControler.deinit();
     _currentControler = newControler;
     _currentControler.init();
-    _now = performance.now();
+
+    _nowUs = Math.round(performance.now() * 1000);
 }
 
 
 ////////////////////////////////////////////////////////////
-export function game_render_one_frame()
+export function game_render_one_frame(nowMs: number)
 {
-    let startOfFrame = performance.now();
+    let startOfFrameUs = Math.round(nowMs * 1000);
 
     let [windowRect, windowWidthInPixel, windowHeightInPixel] = renderer_get_window_info();
     renderer_start_frame();
     let events = event_get_frame_event();
     gui_init_frame();
 
-    _lastFrameTime = _now;
-    _now = performance.now();
-    let elapsedTime = _now - _lastFrameTime;
+    _lastFrameTimeUs = _nowUs;
+    _nowUs           = startOfFrameUs;
+    _elapsedTimeUs   = _nowUs - _lastFrameTimeUs;
 
     events = gui_process_event(events);
     _currentControler.process_event(events);
 
     gui_prepare_new_frame();
 
-    _currentControler.simulate(elapsedTime, _frameId);
+    _currentControler.simulate(_elapsedTimeUs, _frameId);
     _currentControler.draw(windowRect, _frameId);
 
     renderer_immediate_flush();
     _frameId += 1;
 
-    let endOfFrame = performance.now();
-    // console.log("Frame duration", endOfFrame - startOfFrame);
+    let endOfFrameUs = Math.round(performance.now() * 1000);
+    // console.log("Frame duration", endOfFrameUs - startOfFrameUs);
 
     requestAnimationFrame(game_render_one_frame);
 }
