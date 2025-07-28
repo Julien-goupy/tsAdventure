@@ -800,7 +800,8 @@ function _caller_info(): string
 function _hash_string(str: string): number
 {
   let hash = 5381;
-  for (let i = 0; i < str.length; i++) {
+    for (let i = 0; i < str.length; i++)
+    {
     hash = ((hash << 5) + hash) + str.charCodeAt(i); // hash * 33 + c
   }
   return hash >>> 0;
@@ -808,7 +809,7 @@ function _hash_string(str: string): number
 
 
 ////////////////////////////////////////////////////////////
-export function widget_id(i: number = 0): number
+function widget_id_old(i: number = 0): number
 {
   const callerLocation = _caller_info();
   const seed = `${callerLocation}#${i}`;
@@ -817,10 +818,33 @@ export function widget_id(i: number = 0): number
 
 
 ////////////////////////////////////////////////////////////
+export function widget_id(i: number = 0): number
+{
+    const err = new Error();
+    if (!err.stack) return 0;
+
+    let stack      = err.stack;
+    let firstLine  = stack.indexOf('\n');
+    let secondLine = stack.indexOf('\n', firstLine  + 1);
+    if (secondLine === -1) secondLine = stack.length;
+
+    let hash = 5381;
+    for (let j = firstLine; j < secondLine; j++)
+    {
+        hash = ((hash << 5) + hash) + stack.charCodeAt(j);
+    }
+
+    hash = ((hash << 5) + hash) + i;
+
+    return hash >>> 0;
+}
+
+
+////////////////////////////////////////////////////////////
 export function widget_component_id(widgetId: number, i: number = 0): number
 {
-  const seed = `${widgetId}#${i}`;
-  return _hash_string(seed);
+    widgetId = ((widgetId << 5) + widgetId) + i;
+    return widgetId >>> 0;
 }
 
 
@@ -979,9 +1003,9 @@ function _find_cursor_position(s: string, font: MonoFont, scale: number, x: numb
             if (endOfLine === -1)
                 endOfLine = s.length;
 
-            let line = s.substring(startOfLine, endOfLine);
+            let lineCount    = endOfLine - startOfLine;
             let cursorOffset = cursorX;
-            if (cursorOffset > line.length) cursorOffset = line.length;
+            if (cursorOffset > lineCount) cursorOffset = lineCount;
             cursorPosition = startOfLine + cursorOffset;
 
             break;
