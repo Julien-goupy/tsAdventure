@@ -102,6 +102,7 @@ interface FileSystemItem
     flag    : FileSystemFlag;
     name    : string;
     id      : number;
+    frameId : number;
     children: FileSystemItem[];
     parent  : FileSystemItem | null;
     data    : any | null;
@@ -113,24 +114,13 @@ function file_tree_recursive_flatten(item: FileSystemItem, flatFileTree: FileSys
 {
     for (let child of item.children)
     {
-        child.flag = (child.flag & ~FileSystemFlag.DEPTH_MASK) | (depth << DEPTH_MASK_OFFSET);
+        child.flag    = (child.flag & ~FileSystemFlag.DEPTH_MASK) | (depth << DEPTH_MASK_OFFSET);
+        child.frameId = widget_component_id(item.frameId, child.id);
         flatFileTree.push(child);
         if ((child.flag & FileSystemFlag.EXPENDED_DIRECTORY) === FileSystemFlag.EXPENDED_DIRECTORY)
             file_tree_recursive_flatten(child, flatFileTree, depth + 1);
     }
 }
-
-
-////////////////////////////////////////////////////////////
-function file_tree_hash(str: string): number
-{
-    let hash = 5381;
-    for (let i = 0; i < str.length; i++)
-        hash = ((hash << 5) + hash) + str.charCodeAt(i);
-    return hash >>> 0;
-}
-
-
 
 
 
@@ -151,6 +141,8 @@ function file_tree_hash(str: string): number
 let _fileSystemRoot : FileSystemItem   = null as unknown as FileSystemItem;
 let _openedTabs     : FileSystemItem[] = [];
 let _selectedTab    : FileSystemItem   = null as unknown as FileSystemItem;
+let _flattenFileTree: FileSystemItem[] = [];
+
 
 const S = `Hello Bertrand
 Comme tu peux le voir j'ai un chouette editeur.
@@ -240,7 +232,10 @@ sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
 Ut enim ad minim veniam,
 quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`;
+Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+0
+1
+2`;
 
 
 
@@ -274,7 +269,8 @@ function init()
         {
             flag    : FileSystemFlag.DIRECTORY,
             name    : "",
-            id      : widget_id(),
+            id      : widget_id(__LINE__),
+            frameId : 0,
             children: [],
             parent  : null,
             data    : null,
@@ -284,7 +280,8 @@ function init()
         {
             flag    : FileSystemFlag.DIRECTORY,
             name    : "d0",
-            id      : widget_id(),
+            id      : widget_id(__LINE__),
+            frameId : 0,
             children: [],
             parent  : _fileSystemRoot,
             data    : null,
@@ -296,7 +293,8 @@ function init()
         {
             flag    : FileSystemFlag.FILE,
             name    : "f0.txt",
-            id      : widget_id(),
+            id      : widget_id(__LINE__),
+            frameId : 0,
             children: [],
             parent  : d0,
             data    : S
@@ -307,7 +305,8 @@ function init()
         {
             flag    : FileSystemFlag.FILE,
             name    : "f1.txt",
-            id      : widget_id(),
+            id      : widget_id(__LINE__),
+            frameId : 0,
             children: [],
             parent  : d0,
             data    : null,
@@ -318,7 +317,8 @@ function init()
         {
             flag    : FileSystemFlag.FILE,
             name    : "f2.txt",
-            id      : widget_id(),
+            id      : widget_id(__LINE__),
+            frameId : 0,
             children: [],
             parent  : d0,
             data    : null,
@@ -330,7 +330,8 @@ function init()
         {
             flag    : FileSystemFlag.DIRECTORY,
             name    : "d1",
-            id      : widget_id(),
+            id      : widget_id(__LINE__),
+            frameId : 0,
             children: [],
             parent  : _fileSystemRoot,
             data    : null,
@@ -527,14 +528,14 @@ function draw(windowRect: Rect, frameId: number)
 
                 {
                     [iconRect, iconBarRect] = rect_cut_left(iconBarRect, iconBarHeight, 2);
-                    let widgetId = widget_id();
+                    let widgetId = widget_id(__LINE__);
                     let widget   = gui_rect(widgetId, iconRect, 4, UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE);
                     draw_rect(iconRect, 4, to_color(1, 1 ,1, 1));
                 }
 
                 {
                     [iconRect, iconBarRect] = rect_cut_left(iconBarRect, iconBarHeight, 2);
-                    let widgetId = widget_id()
+                    let widgetId = widget_id(__LINE__)
                     draw_rect(iconRect, 4, to_color(1, 1 ,1, 1));
                 }
             }
@@ -544,21 +545,15 @@ function draw(windowRect: Rect, frameId: number)
                 let scale      = 3;
                 let itemMargin = 1;
                 let lineHeight = 10*scale + 2*itemMargin;
-                let offsetX    = 0;
                 let rect       = to_rect(fileTreeRect.x, fileTreeRect.y, fileTreeRect.width, lineHeight);
 
-                let flattenFileTree: FileSystemItem[] = [];
-                let pathAccumulator: string[]         = [];
-                file_tree_recursive_flatten(_fileSystemRoot, flattenFileTree);
+                _flattenFileTree.length = 0;
+                file_tree_recursive_flatten(_fileSystemRoot, _flattenFileTree);
 
-                for (let i=0; i < flattenFileTree.length ;i+=1)
+                for (let i=0; i < _flattenFileTree.length ;i+=1)
                 {
-                    let item = flattenFileTree[i];
-
-                    pathAccumulator.push(item.name);
-                    let accumulatedPath = pathAccumulator.join("_");
-                    let widgetId        = file_tree_hash(accumulatedPath);
-                    let widget          = gui_rect(widgetId, rect, 2, UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE)
+                    let item   = _flattenFileTree[i];
+                    let widget = gui_rect(item.frameId, rect, 2, UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE)
 
                     // This need to be saved before we update the flag
                     // to prevent having next frame flag interferring with
@@ -599,8 +594,6 @@ function draw(windowRect: Rect, frameId: number)
                     rect.x += depth * 20;
                     draw_text_in_rect(rect, 2, item.name, scale, TextDrawOption.LEFT);
                     rect.x -= depth * 20;
-
-                    pathAccumulator.pop();
                     rect.y += lineHeight;
                 }
             }

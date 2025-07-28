@@ -784,61 +784,11 @@ export function gui_prepare_new_frame()
 ////////////////////////////////////////////////////////////
 // MARK: WIDGET ID
 ////////////////////////////////////////////////////////////
-function _caller_info(): string
+export function widget_id(lineNumber: number, i: number = 0): number
 {
-    const err = new Error();
-    if (!err.stack) return "";
-
-    const stackLines = err.stack.split('\n');
-    const callerLine = stackLines[2].trim();
-
-    return callerLine;
-}
-
-
-////////////////////////////////////////////////////////////
-function _hash_string(str: string): number
-{
-  let hash = 5381;
-    for (let i = 0; i < str.length; i++)
-    {
-    hash = ((hash << 5) + hash) + str.charCodeAt(i); // hash * 33 + c
-  }
-  return hash >>> 0;
-}
-
-
-////////////////////////////////////////////////////////////
-function widget_id_old(i: number = 0): number
-{
-  const callerLocation = _caller_info();
-  const seed = `${callerLocation}#${i}`;
-  return _hash_string(seed);
-}
-
-
-////////////////////////////////////////////////////////////
-export function widget_id(i: number = 0): number
-{
-    // @SpeedUp:
-    //     Use a __file__ and __line__ like macro
-    //     to precompute hashes
-    const err = new Error();
-    if (!err.stack) return 0;
-
-    let stack      = err.stack;
-    let firstLine  = stack.indexOf('\n');
-    let secondLine = stack.indexOf('\n', firstLine  + 1);
-    if (secondLine === -1) secondLine = stack.length;
-
     let hash = 5381;
-    for (let j = firstLine; j < secondLine; j++)
-    {
-        hash = ((hash << 5) + hash) + stack.charCodeAt(j);
-    }
-
+    hash = ((hash << 5) + hash) + lineNumber;
     hash = ((hash << 5) + hash) + i;
-
     return hash >>> 0;
 }
 
