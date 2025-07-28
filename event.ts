@@ -502,7 +502,7 @@ export function event_get_frame_event(): GameEvent[]
         }
     }
 
-    _events.splice(0, countOfProcessedEvent);
+    _events.length -= countOfProcessedEvent;
     return frameEvents;
 }
 

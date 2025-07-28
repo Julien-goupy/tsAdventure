@@ -314,7 +314,7 @@ function init()
         };
         d0.children.push(f1);
 
-        let f12: FileSystemItem =
+        let f2: FileSystemItem =
         {
             flag    : FileSystemFlag.FILE,
             name    : "f2.txt",
@@ -323,7 +323,7 @@ function init()
             parent  : d0,
             data    : null,
         };
-        d0.children.push(f12);
+        d0.children.push(f2);
 
 
         let d1: FileSystemItem =

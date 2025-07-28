@@ -766,7 +766,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 export function gui_prepare_new_frame()
 {
     _activeWidgetIdLastFrame = _activeWidgetId;
-    _currentFrameWidget.splice(0, _currentFrameWidget.length);
+    _currentFrameWidget.length = 0;
 }
 
 
@@ -820,6 +820,9 @@ function widget_id_old(i: number = 0): number
 ////////////////////////////////////////////////////////////
 export function widget_id(i: number = 0): number
 {
+    // @SpeedUp:
+    //     Use a __file__ and __line__ like macro
+    //     to precompute hashes
     const err = new Error();
     if (!err.stack) return 0;
 
