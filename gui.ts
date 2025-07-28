@@ -18,8 +18,10 @@ export const enum UiWidgetCapability
     TEXT_UPDATE     = 1 << 5,
     TEXT            = TEXT_SELECTABLE | TEXT_UPDATE,
 
+    SCROLLABLE = 1 << 6,
+
     BUTTON_CAPABILITY = HOVERABLE | CLICKABLE,
-    TEXT_CAPABILITY   = HOVERABLE | GRABBABLE | CLICKABLE | ACTIVABLE | TEXT_SELECTABLE | TEXT_UPDATE,
+    TEXT_CAPABILITY   = HOVERABLE | GRABBABLE | CLICKABLE | ACTIVABLE | TEXT_SELECTABLE | TEXT_UPDATE | SCROLLABLE,
 
     TEXT_KEEP_STATE_AFTER_DE_ACTIVATION = 1 << 6,
 }
@@ -47,9 +49,10 @@ const enum UiWidgetInternalEvent
     DE_ACTIVATION = 2,
 
     DELTA_MOUSE = 3,
-    UN_GRABBED  = 4,
-    CLICKED     = 5,
-    TEXT        = 6,
+    SCROLL      = 4,
+    UN_GRABBED  = 5,
+    CLICKED     = 6,
+    TEXT        = 7,
 }
 
 
@@ -87,8 +90,9 @@ interface UiContext
     selectionPosition: number;
 
     // Scroll
-    offsetX: number;
-    offsetY: number;
+    offsetX    : number;
+    offsetY    : number;
+    isScrolling: boolean;
 }
 
 
@@ -124,6 +128,7 @@ function get_context(): UiContext
         selectionPosition: -1,
         offsetX          : 0,
         offsetY          : 0,
+        isScrolling      : false,
     };
 }
 
@@ -242,6 +247,19 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
                 }
             }
 
+            if (event.key === GameEventKey.MOUSSE_SCROLL_UP || event.key === GameEventKey.MOUSSE_SCROLL_DOWN)
+            {
+                if (_activeWidgetId !== -1)
+                {
+                    if (_activeWidget.capabilities & UiWidgetCapability.SCROLLABLE)
+                    {
+                        hasEventBeenProcessed = _widget_proc(_activeWidget, UiWidgetInternalEvent.SCROLL, event);
+                    }
+                }
+            }
+
+
+
             if (event_is_keyboard(event) &&
                 event.isPressed          &&
                 _activeWidgetId !== -1   &&
@@ -335,6 +353,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                 context.selectionPosition = context.cursorPosition;
             }
 
+            context.isScrolling   = false;
             hasEventBeenProcessed = true;
         }
 
@@ -356,6 +375,29 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             hasEventBeenProcessed = true;
         }
 
+        else if (eventType === UiWidgetInternalEvent.SCROLL)
+        {
+            context.isScrolling = true;
+
+            // @ts-ignore
+            if (event.key === GameEventKey.MOUSSE_SCROLL_UP)
+            {
+                context.offsetY += charHeight;
+                if (context.offsetY > 0) context.offsetY = 0;
+            }
+            // @ts-ignore
+            else if (event.key === GameEventKey.MOUSSE_SCROLL_DOWN)
+            {
+                let maxHeight = context.countOfLine * charHeight - rect.height;
+                if (maxHeight < 0) maxHeight = 0;
+
+                context.offsetY -= charHeight;
+                if (context.offsetY < -maxHeight) context.offsetY = -maxHeight;
+            }
+
+            hasEventBeenProcessed = true;
+        }
+
         else if (eventType === UiWidgetInternalEvent.UN_GRABBED)
         {
             if (cursorPosition === context.selectionPosition) context.selectionPosition = -1;
@@ -372,6 +414,8 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
             if (event.isPressed)
             {
+                context.isScrolling = false;
+
                 if (event.key === GameEventKey.ARROW_LEFT)
                 {
                     if (event.modifier & GameEventModifier.SHIFT)
@@ -626,7 +670,9 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
 
 
-        if (hasEventBeenProcessed && context.cursorPosition >= 0)
+        if (hasEventBeenProcessed       &&
+            context.cursorPosition >= 0 &&
+            context.isScrolling === false)
         {
             let offsetRectInChar: Rect = to_rect(context.offsetX, context.offsetY, rect.width, rect.height);
             offsetRectInChar.x = Math.floor(offsetRectInChar.x / charWidth);
@@ -645,6 +691,9 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
             if ((cursorY + offsetRectInChar.y) >= offsetRectInChar.height) context.offsetY = (offsetRectInChar.height - cursorY - 1) * charHeight;
             if ((cursorY + offsetRectInChar.y) < 0)                        context.offsetY = -cursorY * charHeight;
+
+            if ((cursorX + offsetRectInChar.x) >= offsetRectInChar.width) context.offsetX = (offsetRectInChar.width - cursorX) * charWidth;
+            if ((cursorX + offsetRectInChar.x) < 0)                       context.offsetX = -cursorX * charWidth;
         }
     }
 
@@ -962,6 +1011,11 @@ export const enum GuiTextEditorOption
 
 export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOption =GuiTextEditorOption.NONE)
 {
+    const TEXT_COLOR       = to_color(0.8, 0.8, 0.8, 1);
+    const BACKGROUND_COLOR = to_color(0, 0, 0, 1);
+    const SELECTION_COLOR  = to_color(0, 0, 0.6, 1);
+    const CURSOR_COLOR     = to_color(1, 0, 0, 1);
+
     let context                 = widget_context_of(widget);
     let offsetX                 = context.offsetX;
     let offsetY                 = context.offsetY;
@@ -999,12 +1053,12 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
             if (accumulatedTextLength === endOfSelection)   isSelecting = false;
 
             if (isSelecting)
-                draw_quad(to_rect(x, y, glyphWidth, lineHeight), widget.z + 1, to_color(0, 0, 0.6, 1));
+                draw_quad(to_rect(x, y, glyphWidth, lineHeight), widget.z + 1, SELECTION_COLOR);
 
             if (accumulatedTextLength === cursorPosition)
             {
                 let cursorRect = to_rect(x, y, scale, lineHeight);
-                draw_quad(cursorRect, widget.z + 3, to_color(1, 0, 0, 1));
+                draw_quad(cursorRect, widget.z + 3, CURSOR_COLOR);
             }
 
             accumulatedTextLength += 1;
@@ -1014,7 +1068,7 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
         if (accumulatedTextLength === cursorPosition)
         {
             let cursorRect = to_rect(x, y, scale, lineHeight);
-            draw_quad(cursorRect, widget.z + 2, to_color(1, 0, 0, 1));
+            draw_quad(cursorRect, widget.z + 2, CURSOR_COLOR);
         }
 
         if (accumulatedTextLength === startOfSelection) isSelecting = true;
@@ -1035,7 +1089,7 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
         let j    = 0;
         for (; j < line.length ;j+=1)
         {
-            font_draw_ascii(x, y, widget.z + 2, font, scale, line[j]);
+            font_draw_ascii(x, y, widget.z + 2, font, scale, line[j], TEXT_COLOR);
             x += glyphWidth;
         }
         y += lineHeight;

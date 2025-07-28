@@ -108,14 +108,16 @@ export const enum GameEventKey
 
     END_OF_KEYBOARD = 320,
 
-    MOUSSE_LEFT   = 320,
-    MOUSSE_MIDDLE = 321,
-    MOUSSE_RIGHT  = 322,
-    MOUSSE_4      = 323,
-    MOUSSE_5      = 324,
-    MOUSSE_6      = 325,
+    MOUSSE_LEFT        = 320,
+    MOUSSE_MIDDLE      = 321, // scroll click
+    MOUSSE_RIGHT       = 322,
+    MOUSSE_4           = 323,
+    MOUSSE_5           = 324,
+    MOUSSE_6           = 325,
+    MOUSSE_SCROLL_UP   = 326,
+    MOUSSE_SCROLL_DOWN = 327,
 
-    END_OF_MOUSE = 330,
+    END_OF_MOUSE = 380,
 }
 
 
@@ -197,6 +199,25 @@ export function event_init()
 
         if (event.type !== GameEventType.NONE)
             _events.push(event)
+    }
+
+
+    function mousse_scroll(browserEvent: WheelEvent)
+    {
+        browserEvent.preventDefault();
+
+
+        let key: GameEventKey = GameEventKey.MOUSSE_SCROLL_UP;
+        if (browserEvent.deltaY > 0) key = GameEventKey.MOUSSE_SCROLL_DOWN;
+
+        let event: GameEvent = {
+                                    type     : GameEventType.KEY,
+                                    key      : key,
+                                    isPressed: true,
+                                    modifier : _modifier,
+                                    data     : null
+                               };
+        _events.push(event);
     }
 
 
@@ -410,6 +431,7 @@ export function event_init()
     _canvas.addEventListener('mouseleave', ev => {mouseX = ev.clientX; mouseY = ev.clientY;});
     document.addEventListener('keydown', ev => keyboard_button(true, ev));
     document.addEventListener('keyup'  , ev => keyboard_button(false, ev));
+    document.addEventListener('wheel', (event: WheelEvent) => mousse_scroll(event));
 }
 
 
