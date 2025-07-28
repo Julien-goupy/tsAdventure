@@ -609,6 +609,10 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                 else if (event.key === GameEventKey.HOME)
                 {
+                    if (event.modifier & GameEventModifier.SHIFT)
+                        if (context.selectionPosition === -1)
+                            context.selectionPosition = context.cursorPosition;
+
                     let [startOfLine, endOfLine] = _text_get_line_containing_cursor(text, cursorPosition);
                     context.cursorPosition = startOfLine;
                     hasEventBeenProcessed  = true;
@@ -616,6 +620,10 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                 else if (event.key === GameEventKey.END)
                 {
+                    if (event.modifier & GameEventModifier.SHIFT)
+                        if (context.selectionPosition === -1)
+                            context.selectionPosition = context.cursorPosition;
+
                     let [startOfLine, endOfLine] = _text_get_line_containing_cursor(text, cursorPosition);
                     context.cursorPosition = endOfLine;
                     hasEventBeenProcessed  = true;
