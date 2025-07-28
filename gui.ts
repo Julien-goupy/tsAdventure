@@ -237,11 +237,11 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
 
             if (event.key === GameEventKey.MOUSSE_SCROLL_UP || event.key === GameEventKey.MOUSSE_SCROLL_DOWN)
             {
-                if (_activeWidgetId !== -1)
+                if (_hoveredWidgetId !== -1)
                 {
-                    if (_activeWidget.capabilities & UiWidgetCapability.SCROLLABLE)
+                    if (_hoveredWidget.capabilities & UiWidgetCapability.SCROLLABLE)
                     {
-                        hasEventBeenProcessed = _widget_proc(_activeWidget, UiWidgetInternalEvent.SCROLL, event);
+                        hasEventBeenProcessed = _widget_proc(_hoveredWidget, UiWidgetInternalEvent.SCROLL, event);
                     }
                 }
             }
@@ -1093,9 +1093,10 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
     const CURSOR_COLOR     = to_color(1, 0, 0, 1);
 
     let context                 = widget_context_of(widget);
+    let text                    = context.text;
+    let count                   = text.length;
     let offsetX                 = context.offsetX;
     let offsetY                 = context.offsetY;
-    let lines                   = widget.text.split("\n");
     let rect                    = widget.rect;
     let scale                   = context.scale;
     let startingX               = rect.x + offsetX + scale;
@@ -1120,11 +1121,13 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
 
     scissor_push(rect);
 
-    for (let i=0; i < lines.length ; i+=1)
+    let startOfLine = 0;
+    let endOfLine   = text.indexOf("\n");
+
+    while (startOfLine < count)
     {
-        let line = lines[i];
-        let j    = 0;
-        for (; j < line.length ;j+=1)
+        let j = startOfLine;
+        for (; j < endOfLine ;j+=1)
         {
             if (accumulatedTextLength === startOfSelection) isSelecting = true;
             if (accumulatedTextLength === endOfSelection)   isSelecting = false;
@@ -1154,23 +1157,31 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
         accumulatedTextLength += 1;
         y += lineHeight;
         x = startingX;
+
+        startOfLine = endOfLine + 1;
+        endOfLine   = text.indexOf("\n", startOfLine);
+        if (endOfLine === -1) endOfLine = text.length;
     }
 
 
     x = startingX;
     y = rect.y + offsetY;
+    startOfLine = 0;
+    endOfLine   = text.indexOf("\n");
 
-    for (let i=0; i < lines.length ; i+=1)
+    while (startOfLine < count)
     {
-        let line = lines[i];
-        let j    = 0;
-        for (; j < line.length ;j+=1)
+        for (let j = startOfLine; j < endOfLine ;j+=1)
         {
-            font_draw_ascii(x, y, widget.z + 2, font, scale, line[j], TEXT_COLOR);
+            font_draw_ascii(x, y, widget.z + 2, font, scale, text[j], TEXT_COLOR);
             x += glyphWidth;
         }
         y += lineHeight;
         x = startingX;
+
+        startOfLine = endOfLine + 1;
+        endOfLine   = text.indexOf("\n", startOfLine);
+        if (endOfLine === -1) endOfLine = text.length;
     }
 
     scissor_pop();
