@@ -518,8 +518,11 @@ export function event_is_keyboard(event: GameEvent): boolean
 ////////////////////////////////////////////////////////////
 export function event_is_printable(event: GameEvent): boolean
 {
+    let isClassicPrintable = (32 <= event.key && event.key <= 126);
+    let isTab              = event.key === GameEventKey.TAB;
+
     return (event.type === GameEventType.KEY) &&
-           (32 <= event.key && event.key <= 126);
+           (isClassicPrintable || isTab);
 }
 
 

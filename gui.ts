@@ -680,8 +680,11 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         {
                         }
 
+                        if (event.key === GameEventKey.TAB)
+                            textToInsert = "    ";
+
                         context.text = _text_delete_insert(text, startOfDeletion, endOfDeletion, textToInsert);
-                        context.cursorPosition = startOfDeletion + 1;
+                        context.cursorPosition = startOfDeletion + textToInsert.length;
 
                         context.selectionPosition = -1;
                         context.countOfLine += string_count(textToInsert, "\n") - string_count(text, "\n", startOfDeletion, endOfDeletion);
