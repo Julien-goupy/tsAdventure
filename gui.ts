@@ -1,7 +1,7 @@
 import { clipboard_push, EVENT_COPY_PASTE_KEY, event_is_keyboard, event_is_printable, GameEvent, GameEventKey, GameEventModifier, GameEventType, mouseX, mouseY } from "./event";
 import { _defaultFont, font_draw_ascii, MonoFont } from "./font";
-import { draw_quad, Rect, rect_contain, renderer_scissor_pop, renderer_scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
-import { char_is_identifier, char_is_space } from "./string";
+import { draw_quad, Rect, rect_contain, scissor_pop, scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
+import { char_is_identifier, char_is_space, string_count } from "./string";
 
 ////////////////////////////////////////////////////////////
 // MARK: SYSTEM
@@ -295,6 +295,9 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
         let text           = context.text;
         let cursorPosition = context.cursorPosition;
         let scale          = context.scale;
+        let rect           = widget.rect;
+        let charWidth  = font.width  * scale;
+        let charHeight = font.height * scale;
 
         if (eventType === UiWidgetInternalEvent.ACTIVATION)
         {
@@ -527,6 +530,21 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                     context.selectionPosition = -1;
                     hasEventBeenProcessed     = true;
+                    context.countOfLine       -= string_count(text, "\n", startOfDeletion, endOfDeletion);
+                }
+
+                else if (event.key === GameEventKey.HOME)
+                {
+                    let [startOfLine, endOfLine] = _text_get_line_containing_cursor(text, cursorPosition);
+                    context.cursorPosition = startOfLine;
+                    hasEventBeenProcessed  = true;
+                }
+
+                else if (event.key === GameEventKey.END)
+                {
+                    let [startOfLine, endOfLine] = _text_get_line_containing_cursor(text, cursorPosition);
+                    context.cursorPosition = endOfLine;
+                    hasEventBeenProcessed  = true;
                 }
 
                 else if (event_is_printable(event))
@@ -555,10 +573,13 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                             [startOfCopy, endOfCopy] = _text_get_line_containing_cursor(text, context.cursorPosition);
                         }
 
-                        clipboard_push(text.substring(startOfCopy, endOfCopy));
+                        let textToCut = text.substring(startOfCopy, endOfCopy)
+                        clipboard_push(textToCut);
                         context.text              = _text_delete_insert(text, startOfCopy, endOfCopy, "");
                         context.cursorPosition    = startOfCopy;
                         context.selectionPosition = -1;
+
+                        context.countOfLine -= string_count(textToCut, "\n");
                     }
                     else
                     {
@@ -581,6 +602,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         context.cursorPosition = startOfDeletion + 1;
 
                         context.selectionPosition = -1;
+                        context.countOfLine += string_count(textToInsert, "\n") - string_count(text, "\n", startOfDeletion, endOfDeletion);
                     }
 
                     hasEventBeenProcessed = true;
@@ -595,23 +617,33 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                     }
 
                     hasEventBeenProcessed = true;
+                    context.countOfLine += 1;
                 }
 
             }
         }
 
-        if (hasEventBeenProcessed)
+
+
+        if (hasEventBeenProcessed && context.cursorPosition >= 0)
         {
-            // if (context.cursorPosition < 0)                   context.cursorPosition = 0;
-            // if (context.cursorPosition > context.text.length) context.cursorPosition = context.text.length;
+            let offsetRectInChar: Rect = to_rect(context.offsetX, context.offsetY, rect.width, rect.height);
+            offsetRectInChar.x = Math.floor(offsetRectInChar.x / charWidth);
+            offsetRectInChar.y = Math.floor(offsetRectInChar.y / charHeight);
+            offsetRectInChar.width  = Math.floor(offsetRectInChar.width  / charWidth);
+            offsetRectInChar.height = Math.floor(offsetRectInChar.height / charHeight);
 
-            // let cursorX = context.offsetX  + font.width * context.scale * context.cursorPosition;
-            // let offsetX = context.offsetX;
+            // console.log(offsetRectInChar);
 
-            // if (cursorX < 0)                 offsetX -= cursorX;
-            // if (cursorX > widget.rect.width) offsetX -= (cursorX - widget.rect.width) + context.scale;
+            let startOfCursorLine = context.text.substring(0, context.cursorPosition).lastIndexOf("\n") + 1;
 
-            // context.offsetX = offsetX;
+            let cursorX = context.cursorPosition - startOfCursorLine;
+            let cursorY = string_count(context.text, "\n", 0, context.cursorPosition);
+
+            // console.log(cursorX, cursorY);
+
+            if ((cursorY + offsetRectInChar.y) >= offsetRectInChar.height) context.offsetY = (offsetRectInChar.height - cursorY - 1) * charHeight;
+            if ((cursorY + offsetRectInChar.y) < 0)                        context.offsetY = -cursorY * charHeight;
         }
     }
 
@@ -703,10 +735,7 @@ export function widget_context_of(widget: UiWidget): UiContext
 export function widget_context_set_text(context: UiContext, s: string)
 {
     context.text        = s;
-    context.countOfLine = 1;
-
-    for(let i=0; i < s.length; i+=1)
-        if (s[i] === "\n") context.countOfLine += 1;
+    context.countOfLine = string_count(context.text, "\n") + 1;
 }
 
 
@@ -826,7 +855,7 @@ function _find_cursor_position(s: string, font: MonoFont, scale: number, x: numb
     let cursorPosition = -1;
     let glyphWidth     = font.width  * scale;
     let lineHeight     = font.height * scale;
-    let cursorX        = Math.round(x / glyphWidth - 0.2);
+    let cursorX        = Math.round(x / glyphWidth + 0.4);
     let cursorY        = Math.floor(y / lineHeight);
     let startOfLine    = 0;
     let endOfLine      = 0;
@@ -929,9 +958,12 @@ export const enum GuiTextEditorOption
 export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOption =GuiTextEditorOption.NONE)
 {
     let context                 = widget_context_of(widget);
+    let offsetX                 = context.offsetX;
+    let offsetY                 = context.offsetY;
     let lines                   = widget.text.split("\n");
-    let x                       = widget.rect.x;
-    let y                       = widget.rect.y;
+    let rect                    = widget.rect;
+    let x                       = rect.x + offsetX;
+    let y                       = rect.y + offsetY;
     let font                    = _defaultFont;
     let scale                   = context.scale;
     let glyphWidth              = scale * font.width;
@@ -939,6 +971,7 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
     let accumulatedTextLength   = 0
     let cursorPosition          = context.cursorPosition;
     let selectionCursorPosition = context.selectionPosition;
+
 
     let startOfSelection = -1;
     let endOfSelection   = -1;
@@ -949,6 +982,7 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
         endOfSelection   = Math.max(selectionCursorPosition, cursorPosition);
     }
 
+    scissor_push(rect);
 
     for (let i=0; i < lines.length ; i+=1)
     {
@@ -983,12 +1017,12 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
 
         accumulatedTextLength += 1;
         y += lineHeight;
-        x = widget.rect.x;
+        x = rect.x + offsetX;
     }
 
 
-    x = widget.rect.x;
-    y = widget.rect.y;
+    x = rect.x + offsetX;
+    y = rect.y + offsetY;
 
     for (let i=0; i < lines.length ; i+=1)
     {
@@ -1000,8 +1034,10 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
             x += font.width * scale;
         }
         y += lineHeight;
-        x = widget.rect.x;
+        x = rect.x;
     }
+
+    scissor_pop();
 }
 
 
@@ -1070,7 +1106,7 @@ export function gui_text_input_draw(widget: UiWidget)
     let text  = widget.text;
     let scale = context.scale;
 
-    renderer_scissor_push(widget.rect);
+    scissor_push(widget.rect);
     draw_quad(widget.rect, z, to_color(0, 0, 0, 1));
 
 
@@ -1093,5 +1129,5 @@ export function gui_text_input_draw(widget: UiWidget)
         draw_quad(cursorRect, z+2, to_color(1, 0, 0, 1));
     }
 
-    renderer_scissor_pop();
+    scissor_pop();
 }

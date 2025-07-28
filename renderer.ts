@@ -814,7 +814,7 @@ let _isScissorEnable: boolean = false;
 
 
 ////////////////////////////////////////////////////////////
-export function renderer_scissor_push(r: Rect)
+export function scissor_push(r: Rect)
 {
     renderer_immediate_flush();
 
@@ -832,7 +832,7 @@ export function renderer_scissor_push(r: Rect)
 
 
 ////////////////////////////////////////////////////////////
-export function renderer_scissor_pop()
+export function scissor_pop()
 {
     renderer_immediate_flush();
 

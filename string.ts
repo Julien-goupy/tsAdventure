@@ -31,3 +31,27 @@ export function char_is_identifier(s: string, i: number): boolean
            (97 <= c && c <= 122) ||
            c === 95 ;
 }
+
+
+
+////////////////////////////////////////////////////////////
+export function string_count(haystack: string, needle: string, startOfSearch: number =0, endOfSearch: number =-1): number
+{
+    if (endOfSearch === -1) endOfSearch = haystack.length;
+    let occurenceCount = 0;
+    let i              = 0;
+    let haystackCount  = haystack.length;
+    let needleCount    = needle.length;
+
+    while (i < haystackCount)
+    {
+        let indexOfNextOccurrence = haystack.indexOf(needle, startOfSearch);
+        if (indexOfNextOccurrence === -1)         break;
+        if (indexOfNextOccurrence >= endOfSearch) break;
+
+        occurenceCount += 1;
+        startOfSearch = indexOfNextOccurrence + needleCount;
+    }
+
+    return occurenceCount;
+}
