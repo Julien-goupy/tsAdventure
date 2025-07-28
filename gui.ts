@@ -350,9 +350,10 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
         else if (eventType === UiWidgetInternalEvent.DELTA_MOUSE)
         {
-            let localMouseX = mouseX - (widget.rect.x + context.offsetX);
-            let localMouseY = mouseY - (widget.rect.y + context.offsetY);
+            let localMouseX = mouseX - (rect.x + context.offsetX);
+            let localMouseY = mouseY - (rect.y + context.offsetY);
             context.cursorPosition = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
+            hasEventBeenProcessed = true;
         }
 
         else if (eventType === UiWidgetInternalEvent.UN_GRABBED)
@@ -882,7 +883,11 @@ function _find_cursor_position(s: string, font: MonoFont, scale: number, x: numb
         lineNumber += 1;
     }
 
-    if (cursorPosition === -1) cursorPosition = s.length;
+    if (cursorPosition === -1)
+    {
+            if (y > 0) cursorPosition = s.length;
+            else       cursorPosition = 0;
+    }
     return cursorPosition;
 }
 
