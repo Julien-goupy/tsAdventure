@@ -378,22 +378,43 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
         else if (eventType === UiWidgetInternalEvent.SCROLL)
         {
-            context.isScrolling = true;
-
             // @ts-ignore
-            if (event.key === GameEventKey.MOUSSE_SCROLL_UP)
+            if (event.modifier & GameEventModifier.CONTROL)
             {
-                context.offsetY += charHeight;
-                if (context.offsetY > 0) context.offsetY = 0;
+                // @ts-ignore
+                if (event.key === GameEventKey.MOUSSE_SCROLL_UP)
+                {
+                    if (scale < 5) context.scale += 1;
+                }
+                // @ts-ignore
+                else if (event.key === GameEventKey.MOUSSE_SCROLL_DOWN)
+                {
+                    if (scale > 1) context.scale -= 1;
+                }
+
+                scale      = context.scale;
+                charWidth  = font.width  * scale;
+                charHeight = font.height * scale;
             }
-            // @ts-ignore
-            else if (event.key === GameEventKey.MOUSSE_SCROLL_DOWN)
+            else
             {
-                let maxHeight = context.countOfLine * charHeight - rect.height;
-                if (maxHeight < 0) maxHeight = 0;
+                context.isScrolling = true;
 
-                context.offsetY -= charHeight;
-                if (context.offsetY < -maxHeight) context.offsetY = -maxHeight;
+                // @ts-ignore
+                if (event.key === GameEventKey.MOUSSE_SCROLL_UP)
+                {
+                    context.offsetY += charHeight;
+                    if (context.offsetY > 0) context.offsetY = 0;
+                }
+                // @ts-ignore
+                else if (event.key === GameEventKey.MOUSSE_SCROLL_DOWN)
+                {
+                    let maxHeight = context.countOfLine * charHeight - rect.height;
+                    if (maxHeight < 0) maxHeight = 0;
+
+                    context.offsetY -= charHeight;
+                    if (context.offsetY < -maxHeight) context.offsetY = -maxHeight;
+                }
             }
 
             hasEventBeenProcessed = true;

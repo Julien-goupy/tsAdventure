@@ -431,7 +431,7 @@ export function event_init()
     _canvas.addEventListener('mouseleave', ev => {mouseX = ev.clientX; mouseY = ev.clientY;});
     document.addEventListener('keydown', ev => keyboard_button(true, ev));
     document.addEventListener('keyup'  , ev => keyboard_button(false, ev));
-    document.addEventListener('wheel', (event: WheelEvent) => mousse_scroll(event));
+    document.addEventListener('wheel', (event: WheelEvent) => mousse_scroll(event), { passive: false });
 }
 
 
