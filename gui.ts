@@ -544,6 +544,22 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                         clipboard_push(text.substring(startOfCopy, endOfCopy));
                     }
+                    else if ((event.modifier & EVENT_COPY_PASTE_KEY) &&
+                         (event.key === GameEventKey._X || event.key === GameEventKey._x))
+                    {
+                        let startOfCopy = Math.min(context.cursorPosition, context.selectionPosition);
+                        let endOfCopy   = Math.max(context.cursorPosition, context.selectionPosition);
+
+                        if (context.selectionPosition === -1 || startOfCopy === endOfCopy)
+                        {
+                            [startOfCopy, endOfCopy] = _text_get_line_containing_cursor(text, context.cursorPosition);
+                        }
+
+                        clipboard_push(text.substring(startOfCopy, endOfCopy));
+                        context.text              = _text_delete_insert(text, startOfCopy, endOfCopy, "");
+                        context.cursorPosition    = startOfCopy;
+                        context.selectionPosition = -1;
+                    }
                     else
                     {
                         let startOfDeletion = context.cursorPosition;
