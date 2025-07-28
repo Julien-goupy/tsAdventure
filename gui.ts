@@ -309,13 +309,14 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
         }
 
          // Can only be used for read
-        let font           = context.font;
-        let text           = context.text;
-        let cursorPosition = context.cursorPosition;
-        let scale          = context.scale;
-        let rect           = widget.rect;
-        let charWidth  = font.width  * scale;
-        let charHeight = font.height * scale;
+        let font              = context.font;
+        let text              = context.text;
+        let cursorPosition    = context.cursorPosition;
+        let selectionPosition = context.selectionPosition;
+        let scale             = context.scale;
+        let rect              = widget.rect;
+        let charWidth         = font.width  * scale;
+        let charHeight        = font.height * scale;
 
         if (eventType === UiWidgetInternalEvent.ACTIVATION)
         {
@@ -553,18 +554,25 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                 else if (event.key === GameEventKey.BACKSPACE || event.key === GameEventKey.DELETE)
                 {
-                    let startOfDeletion = context.cursorPosition - 1;
-                    let endOfDeletion   = context.cursorPosition;
+                    let startOfDeletion = cursorPosition - 1;
+                    let endOfDeletion   = cursorPosition;
+
+                    if (event.modifier & GameEventModifier.CONTROL)
+                        startOfDeletion = _text_get_previous_word(text, cursorPosition);
+
                     if (event.key === GameEventKey.DELETE)
                     {
-                        startOfDeletion = context.cursorPosition;
-                        endOfDeletion   = context.cursorPosition + 1;
+                        startOfDeletion = cursorPosition;
+                        endOfDeletion   = cursorPosition + 1;
+
+                        if (event.modifier & GameEventModifier.CONTROL)
+                            endOfDeletion = _text_get_next_word(text, cursorPosition);
                     }
 
                     if (context.selectionPosition !== -1)
                     {
-                        startOfDeletion = Math.min(context.selectionPosition, context.cursorPosition);
-                        endOfDeletion   = Math.max(context.selectionPosition, context.cursorPosition);
+                        startOfDeletion = Math.min(selectionPosition, cursorPosition);
+                        endOfDeletion   = Math.max(selectionPosition, cursorPosition);
                     }
 
                     if (startOfDeletion >= 0 && startOfDeletion < text.length)
