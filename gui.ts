@@ -1,6 +1,7 @@
 import { clipboard_push, EVENT_COPY_PASTE_KEY, event_is_keyboard, event_is_printable, GameEvent, GameEventKey, GameEventModifier, GameEventType, mouseX, mouseY } from "./event";
-import {_defaultFont, font_draw_ascii, MonoFont} from "./font";
-import { draw_quad, draw_text, Rect, rect_contain, renderer_scissor_pop, renderer_scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
+import { _defaultFont, font_draw_ascii, MonoFont } from "./font";
+import { draw_quad, Rect, rect_contain, renderer_scissor_pop, renderer_scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
+import { char_is_identifier, char_is_space } from "./string";
 
 ////////////////////////////////////////////////////////////
 // MARK: SYSTEM
@@ -289,8 +290,11 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             return false;
         }
 
-        let font = context.font;
-        let text = context.text;
+         // Can only be used for read
+        let font           = context.font;
+        let text           = context.text;
+        let cursorPosition = context.cursorPosition;
+        let scale          = context.scale;
 
         if (eventType === UiWidgetInternalEvent.ACTIVATION)
         {
@@ -320,11 +324,11 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             {
                 if (context.selectionPosition === -1)
                     context.selectionPosition = context.cursorPosition;
-                context.cursorPosition = _find_cursor_position(text, font, context.scale, localMouseX, localMouseY);
+                context.cursorPosition = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
             }
             else
             {
-                context.cursorPosition    = _find_cursor_position(text, font, context.scale, localMouseX, localMouseY);
+                context.cursorPosition    = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
                 context.selectionPosition = context.cursorPosition;
             }
 
@@ -345,12 +349,12 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
         {
             let localMouseX = mouseX - (widget.rect.x + context.offsetX);
             let localMouseY = mouseY - (widget.rect.y + context.offsetY);
-            context.cursorPosition = _find_cursor_position(text, font, context.scale, localMouseX, localMouseY);
+            context.cursorPosition = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
         }
 
         else if (eventType === UiWidgetInternalEvent.UN_GRABBED)
         {
-            if (context.cursorPosition === context.selectionPosition) context.selectionPosition = -1;
+            if (cursorPosition === context.selectionPosition) context.selectionPosition = -1;
         }
 
         else if (eventType === UiWidgetInternalEvent.TEXT)
@@ -370,10 +374,13 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                     {
                         if (context.selectionPosition === -1)
                         {
-                            context.selectionPosition = context.cursorPosition;
+                            context.selectionPosition = cursorPosition;
                         }
 
-                        context.cursorPosition -= 1;
+                        if (event.modifier & GameEventModifier.CONTROL)
+                            context.cursorPosition = _text_get_previous_word(text, cursorPosition);
+                        else
+                            context.cursorPosition -= 1;
                     }
                     else
                     {
@@ -381,10 +388,16 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         {
                             context.cursorPosition = Math.min(context.cursorPosition, context.selectionPosition);
                             context.selectionPosition = -1;
+
+                            if (event.modifier & GameEventModifier.CONTROL)
+                                context.cursorPosition = _text_get_previous_word(text, context.cursorPosition);
                         }
                         else
                         {
-                            context.cursorPosition -= 1;
+                            if (event.modifier & GameEventModifier.CONTROL)
+                                context.cursorPosition = _text_get_previous_word(text, cursorPosition);
+                            else
+                                context.cursorPosition -= 1;
                         }
                     }
 
@@ -402,7 +415,10 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                             context.selectionPosition = context.cursorPosition;
                         }
 
-                        context.cursorPosition += 1;
+                        if (event.modifier & GameEventModifier.CONTROL)
+                            context.cursorPosition = _text_get_next_word(text, cursorPosition);
+                        else
+                            context.cursorPosition += 1;
                     }
                     else
                     {
@@ -410,10 +426,16 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         {
                             context.cursorPosition = Math.max(context.cursorPosition, context.selectionPosition);
                             context.selectionPosition = -1;
+
+                            if (event.modifier & GameEventModifier.CONTROL)
+                                context.cursorPosition = _text_get_next_word(text, context.cursorPosition);
                         }
                         else
                         {
-                            context.cursorPosition += 1;
+                            if (event.modifier & GameEventModifier.CONTROL)
+                                context.cursorPosition = _text_get_next_word(text, cursorPosition);
+                            else
+                                context.cursorPosition += 1;
                         }
                     }
 
@@ -533,7 +555,13 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                             endOfDeletion   = Math.max(context.selectionPosition, context.cursorPosition);
                         }
 
-                        context.text = _text_delete_insert(text, startOfDeletion, endOfDeletion, String.fromCharCode(event.key));
+                        let textToInsert = String.fromCharCode(event.key);
+                        if ((event.modifier & EVENT_COPY_PASTE_KEY) &&
+                            (event.key === GameEventKey._V || event.key === GameEventKey._v))
+                        {
+                        }
+
+                        context.text = _text_delete_insert(text, startOfDeletion, endOfDeletion, textToInsert);
                         context.cursorPosition = startOfDeletion + 1;
 
                         context.selectionPosition = -1;
@@ -845,8 +873,32 @@ function _text_get_cursor_or_end_of_line(s: string, startOfLine: number, offset:
 }
 
 
+////////////////////////////////////////////////////////////
+function _text_get_previous_word(s: string, cursor: number): number
+{
+    while (cursor > 0 && char_is_space(s, cursor-1))
+        cursor -= 1;
+
+    while (cursor > 0 && char_is_identifier(s, cursor-1))
+        cursor -= 1;
+
+    return cursor;
+}
 
 
+////////////////////////////////////////////////////////////
+function _text_get_next_word(s: string, cursor: number): number
+{
+    let count = s.length;
+
+    while (cursor < count && char_is_space(s, cursor))
+        cursor += 1;
+
+    while (cursor < count && char_is_identifier(s, cursor))
+        cursor += 1;
+
+    return cursor;
+}
 
 
 
