@@ -926,7 +926,7 @@ function _text_get_cursor_or_end_of_line(s: string, startOfLine: number, offset:
 ////////////////////////////////////////////////////////////
 function _text_get_previous_word(s: string, cursor: number): number
 {
-    while (cursor > 0 && char_is_space(s, cursor-1))
+    while (cursor > 0 && char_is_identifier(s, cursor-1) == false)
         cursor -= 1;
 
     while (cursor > 0 && char_is_identifier(s, cursor-1))
@@ -941,7 +941,7 @@ function _text_get_next_word(s: string, cursor: number): number
 {
     let count = s.length;
 
-    while (cursor < count && char_is_space(s, cursor))
+    while (cursor < count && char_is_identifier(s, cursor) == false)
         cursor += 1;
 
     while (cursor < count && char_is_identifier(s, cursor))
@@ -1008,7 +1008,7 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
             }
 
             accumulatedTextLength += 1;
-            x += font.width * scale;
+            x += glyphWidth;
         }
 
         if (accumulatedTextLength === cursorPosition)
@@ -1036,10 +1036,10 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
         for (; j < line.length ;j+=1)
         {
             font_draw_ascii(x, y, widget.z + 2, font, scale, line[j]);
-            x += font.width * scale;
+            x += glyphWidth;
         }
         y += lineHeight;
-        x = rect.x;
+        x = rect.x + offsetX;
     }
 
     scissor_pop();
