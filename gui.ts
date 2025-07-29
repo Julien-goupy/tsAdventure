@@ -630,7 +630,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                             [startOfCopy, endOfCopy] = _text_get_line_containing_cursor(text, context.cursorPosition);
                         }
 
-                        clipboard_push(text.substring(startOfCopy, endOfCopy));
+                        clipboard_push(text.slice(startOfCopy, endOfCopy));
                     }
                     else if ((event.modifier & EVENT_COPY_PASTE_KEY) &&
                          (event.key === GameEventKey._X || event.key === GameEventKey._x))
@@ -643,7 +643,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                             [startOfCopy, endOfCopy] = _text_get_line_containing_cursor(text, context.cursorPosition);
                         }
 
-                        let textToCut = text.substring(startOfCopy, endOfCopy)
+                        let textToCut = text.slice(startOfCopy, endOfCopy)
                         clipboard_push(textToCut);
                         _text_push_mutation(context.rewinder, text, startOfCopy, endOfCopy, "");
                         context.text              = _text_delete_insert(text, startOfCopy, endOfCopy, "");
@@ -990,8 +990,8 @@ function _text_push_mutation(rewinder: Rewinder, s: string, startOfDeletion: num
     let mutation: TextMutation =
     {
         cursor      : startOfDeletion,
-        deletedText : s.substring(startOfDeletion, endOfDeteletion),
-        insertedText: insertion.substring(0)
+        deletedText : s.slice(startOfDeletion, endOfDeteletion),
+        insertedText: insertion.slice(0)
     };
     rewinder_add_mutation(rewinder, mutation);
 }
