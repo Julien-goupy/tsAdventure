@@ -127,12 +127,9 @@ export const enum GameEventModifier
     SHIFT   = 1 << 0,
     CONTROL = 1 << 1,
     ALT     = 1 << 2,
+    OPTION  = 1 << 2, // On MacOS
     META    = 1 << 3,
 }
-
-export const EVENT_COPY_PASTE_KEY = (platform_get() & Platform.APPLE) === Platform.APPLE?
-                                    GameEventModifier.META : GameEventModifier.CONTROL;
-
 
 
 export interface GameEvent

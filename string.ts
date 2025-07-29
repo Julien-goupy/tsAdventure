@@ -1,7 +1,6 @@
 ////////////////////////////////////////////////////////////
-export function char_is_space(s: string, i: number): boolean
+export function char_is_space(c: number): boolean
 {
-    let c = s.charCodeAt(i);
     return (c === 32 ||  // " "
             c ===  9 ||  // "\t"
             c === 10 ||  // "\n"
@@ -13,9 +12,8 @@ export function char_is_space(s: string, i: number): boolean
 
 
 ////////////////////////////////////////////////////////////
-export function char_is_alphanum(s: string, i: number): boolean
+export function char_is_alphanum(c: number): boolean
 {
-    let c = s.charCodeAt(i);
     return (65 <= c && c <=  90) ||
            (48 <= c && c <=  57) ||
            (97 <= c && c <= 122)  ;
@@ -23,9 +21,8 @@ export function char_is_alphanum(s: string, i: number): boolean
 
 
 ////////////////////////////////////////////////////////////
-export function char_is_identifier(s: string, i: number): boolean
+export function char_is_identifier(c: number): boolean
 {
-    let c = s.charCodeAt(i);
     return (65 <= c && c <=  90) ||
            (48 <= c && c <=  57) ||
            (97 <= c && c <= 122) ||
@@ -51,6 +48,47 @@ export function string_count(haystack: string, needle: string, startOfSearch: nu
 
         occurenceCount += 1;
         startOfSearch = indexOfNextOccurrence + needleCount;
+    }
+
+    return occurenceCount;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const UTF32_NEW_LINE = 10;
+
+
+////////////////////////////////////////////////////////////
+export function string_utf32_count(haystack: Uint32Array, needle: number, startOfSearch: number =0, endOfSearch: number =-1): number
+{
+    if (endOfSearch === -1) endOfSearch = haystack.length;
+    let occurenceCount = 0;
+    let i              = 0;
+    let haystackCount  = haystack.length;
+
+    while (i < haystackCount)
+    {
+        let indexOfNextOccurrence = haystack.indexOf(needle, startOfSearch);
+        if (indexOfNextOccurrence === -1)         break;
+        if (indexOfNextOccurrence >= endOfSearch) break;
+
+        occurenceCount += 1;
+        startOfSearch = indexOfNextOccurrence + 1;
     }
 
     return occurenceCount;

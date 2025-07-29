@@ -97,8 +97,9 @@ export function game_render_one_frame(nowMs: number)
     renderer_immediate_flush();
     _frameId += 1;
 
-    let endOfFrameUs = Math.round(performance.now() * 1000);
-    // console.log("Frame duration", endOfFrameUs - startOfFrameUs);
+    let endOfFrameUs  = Math.round(performance.now() * 1000);
+    let frameDuration = (endOfFrameUs - startOfFrameUs) / 1000;
+    // console.log("Frame duration", frameDuration);
 
     requestAnimationFrame(game_render_one_frame);
 }

@@ -1,7 +1,7 @@
 // import {console_toggle} from "../console";
 import {GameEvent,GameEventKey,GameEventType} from "../event";
 import {_defaultFont,font_get_line_height,font_get_text_dimension} from "../font";
-import {gui_rect,UiWidgetState,UiWidgetCapability,widget_id,widget_context_of,gui_draw_text_editor,widget_context_set_text,widget_component_id,widget_activate} from "../gui";
+import {gui_rect,UiWidgetState,UiWidgetCapability,widget_id,widget_context_of,gui_draw_text_editor,widget_context_set_text,widget_component_id,widget_activate, gui_init} from "../gui";
 import {logic_set_controler,LogicControler} from "../logic";
 import {cursor_set,draw_quad,draw_rect,draw_text_in_rect,MouseCursor,Rect,rect_center,rect_cut_left,rect_cut_right,rect_cut_top,rect_shrink,TextDrawOption,to_color,to_rect} from "../renderer";
 
@@ -263,6 +263,8 @@ export function editor_launch()
 ////////////////////////////////////////////////////////////
 function init()
 {
+    gui_init();
+
     if (_fileSystemRoot === null)
     {
         _fileSystemRoot =
