@@ -427,11 +427,11 @@ export function event_init()
 
     document.addEventListener('mousedown', ev => mousse_button(true, ev));
     document.addEventListener('mouseup'  , ev => mousse_button(false, ev));
-    _canvas.addEventListener('mousemove', ev => {mouseX = ev.clientX; mouseY = ev.clientY;});
+    _canvas.addEventListener('mousemove' , ev => {mouseX = ev.clientX; mouseY = ev.clientY;});
     _canvas.addEventListener('mouseleave', ev => {mouseX = ev.clientX; mouseY = ev.clientY;});
-    document.addEventListener('keydown', ev => keyboard_button(true, ev));
-    document.addEventListener('keyup'  , ev => keyboard_button(false, ev));
-    document.addEventListener('wheel', (event: WheelEvent) => mousse_scroll(event), { passive: false });
+    document.addEventListener('keydown'  , ev => keyboard_button(true, ev));
+    document.addEventListener('keyup'    , ev => keyboard_button(false, ev));
+    document.addEventListener('wheel'    , (event: WheelEvent) => mousse_scroll(event), { passive: false });
 }
 
 

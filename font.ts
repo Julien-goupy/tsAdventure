@@ -92,18 +92,14 @@ export function font_get_text_dimension(s: string, font: MonoFont, scale: number
 
 
 ////////////////////////////////////////////////////////////
-export function font_draw_ascii(x: number, y: number, z: number, font: MonoFont, scale: number, s: string, color: Color = to_color(1, 1, 1, 1))
+export function font_draw_ascii(x: number, y: number, z: number, font: MonoFont, scale: number, utf32: number, color: Color = to_color(1, 1, 1, 1))
 {
-    if (s[0] === " ") return;
-    if (font.texture === null)
-    {
-        return;
-    }
+    if (utf32 === 32)          return;
+    if (font.texture === null) return;
 
     let r: Rect = to_rect(x, y, Math.floor(font.width * scale), Math.floor(font.height * scale));
 
-    let ascii: number = s.charCodeAt(0)
-    let tempUv: Rect | undefined = font.glyphs.get(ascii);
+    let tempUv: Rect | undefined = font.glyphs.get(utf32);
     if (tempUv === undefined) tempUv = font.glyphs.get(font.defaultCharIndex) as Rect;
 
     draw_sprite(r, z, font.texture, tempUv, color);

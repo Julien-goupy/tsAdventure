@@ -731,13 +731,16 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                         if (event.modifier & GameEventModifier.SHIFT)
                         {
-                            let countOfSpaceDeleted = 0;
+                            let countOfSpaceDeleted               = 0;
+                            let countOfSpaceDeletedOnTheFirstLine = 0;
+                            let isOnFirstLine                     = true;
 
                             while (startOfLine !== startOfLastLine)
                             {
                                 if(text.charCodeAt(startOfLine) !== 32)
                                 {
-                                    startOfLine += 1;
+                                    startOfLine   = text.indexOf("\n", startOfLine) + 1;
+                                    isOnFirstLine = false;
                                     continue;
                                 }
 
@@ -746,6 +749,12 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                                     countOfSpaceAtTheBeginingOfTheLine += 1;
 
                                 if (countOfSpaceAtTheBeginingOfTheLine > 4) countOfSpaceAtTheBeginingOfTheLine = 4;
+
+                                if (isOnFirstLine)
+                                {
+                                    countOfSpaceDeletedOnTheFirstLine = countOfSpaceAtTheBeginingOfTheLine;
+                                    isOnFirstLine                     = false;
+                                }
 
                                 text        = _text_delete_insert(text, startOfLine, startOfLine + countOfSpaceAtTheBeginingOfTheLine, "");
                                 startOfLine = text.indexOf("\n", startOfLine) + 1;
@@ -760,19 +769,22 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                                 if (countOfSpaceAtTheBeginingOfTheLine > 4) countOfSpaceAtTheBeginingOfTheLine = 4;
 
+                               if (isOnFirstLine)
+                                    countOfSpaceDeletedOnTheFirstLine = countOfSpaceAtTheBeginingOfTheLine;
+
                                 text = _text_delete_insert(text, startOfLine, startOfLine + countOfSpaceAtTheBeginingOfTheLine, "");
                                 countOfSpaceDeleted += countOfSpaceAtTheBeginingOfTheLine;
                             }
 
                             if (context.cursorPosition < context.selectionPosition)
                             {
-                                context.cursorPosition    -= 4;
+                                context.cursorPosition    -= countOfSpaceDeletedOnTheFirstLine;
                                 context.selectionPosition -= countOfSpaceDeleted;
                             }
                             else
                             {
                                 context.cursorPosition    -= countOfSpaceDeleted;
-                                context.selectionPosition -= 4;
+                                context.selectionPosition -= countOfSpaceDeletedOnTheFirstLine;
                             }
                         }
                         else
@@ -1299,7 +1311,7 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
     {
         for (let j = startOfLine; j < endOfLine ;j+=1)
         {
-            font_draw_ascii(x, y, widget.z + 2, font, scale, text[j], TEXT_COLOR);
+            font_draw_ascii(x, y, widget.z + 2, font, scale, text.charCodeAt(j), TEXT_COLOR);
             x += glyphWidth;
         }
         y += lineHeight;

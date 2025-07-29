@@ -1098,7 +1098,7 @@ export function draw_text(x: number, y: number, z: number, s: string, color: Col
 
     for (let i=0; i < s.length ; i+=1)
     {
-        font_draw_ascii(x, y, z, _defaultFont, scale, s[i], color);
+        font_draw_ascii(x, y, z, _defaultFont, scale, s.charCodeAt(i), color);
         x += 6*scale;
     }
 }
@@ -1125,7 +1125,7 @@ export function draw_text_in_rect(rect: Rect , z: number, s: string, scale: numb
 
     for (let i=0; i < s.length ; i+=1)
     {
-        font_draw_ascii(x, y, z, _defaultFont, scale, s[i], color);
+        font_draw_ascii(x, y, z, _defaultFont, scale, s.charCodeAt(i), color);
         x += 6*scale;
     }
 }
