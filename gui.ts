@@ -741,7 +741,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
             // console.log(offsetRectInChar);
 
-            let startOfCursorLine = context.text.substring(0, context.cursorPosition).lastIndexOf("\n") + 1;
+            let startOfCursorLine = context.text.lastIndexOf("\n", context.cursorPosition - 1) + 1;
 
             let cursorX = context.cursorPosition - startOfCursorLine;
             let cursorY = string_count(context.text, "\n", 0, context.cursorPosition);
@@ -1004,7 +1004,7 @@ function _text_push_mutation(rewinder: Rewinder, s: string, startOfDeletion: num
 ////////////////////////////////////////////////////////////
 function _text_get_line_containing_cursor(s: string, cursorPosition: number): [number, number]
 {
-    let startOfLine = s.substring(0, cursorPosition).lastIndexOf("\n") + 1;
+    let startOfLine = s.lastIndexOf("\n", cursorPosition - 1) + 1;
     let endOfLine   = s.indexOf("\n", cursorPosition);
 
     if (startOfLine === -1) startOfLine = 0;
