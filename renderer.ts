@@ -1,3 +1,5 @@
+// https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices
+
 import { _events, GameEvent, GameEventType } from "./event";
 import { _defaultFont, font_draw_ascii, font_get_text_dimension } from "./font";
 
@@ -1170,7 +1172,7 @@ export function renderer_start_frame()
         _canvas.style.cursor = _currentCursor;
     }
 
-    _scissors.splice(0, _scissors.length);
+    _scissors.length = 0;
     _gl.clear(_gl.COLOR_BUFFER_BIT | _gl.DEPTH_BUFFER_BIT);
     _nextCursor = MouseCursor.DEFAULT;
 }

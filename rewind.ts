@@ -17,7 +17,7 @@ export function rewinder_get(): Rewinder
 ////////////////////////////////////////////////////////////
 export function rewinder_add_mutation(rewinder: Rewinder, mutation: any)
 {
-    rewinder.mutationHistory.splice(rewinder.rewindCursor);
+    rewinder.mutationHistory.length = rewinder.rewindCursor;
     rewinder.mutationHistory.push(mutation);
     rewinder.rewindCursor = rewinder.mutationHistory.length;
 }
