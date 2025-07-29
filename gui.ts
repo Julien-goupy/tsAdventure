@@ -979,9 +979,13 @@ function _find_cursor_position(s: string, font: MonoFont, scale: number, x: numb
 
 
 ////////////////////////////////////////////////////////////
-function _text_delete_insert(s: string, startOfDeletion: number, endOfDeteletion: number, insertion: string): string
+function _text_delete_insert(s: string, startOfDeletion: number, endOfDeletion: number, insertion: string): string
 {
-    return s.slice(0, startOfDeletion) + insertion + s.slice(endOfDeteletion);
+    return [
+               s.slice(0, startOfDeletion),
+               insertion,
+               s.slice(endOfDeletion)
+           ].join('');
 }
 
 
