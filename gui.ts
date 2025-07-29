@@ -892,7 +892,9 @@ export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidg
 
     if (doesThisWidgetNeedContext)
     {
-        if (_contexts.has(id) === false)
+        let context = _contexts.get(id) as UiContext;
+
+        if (context === undefined)
         {
             let context = get_context();
             _contexts.set(id, context);
@@ -900,7 +902,6 @@ export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidg
         }
         else
         {
-            let context = _contexts.get(id) as UiContext;
             widget.text = context.text;
         }
     }
