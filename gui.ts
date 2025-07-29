@@ -1232,6 +1232,9 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
 
     let startOfLine = 0;
     let endOfLine   = text.indexOf("\n");
+    if (endOfLine === -1) endOfLine = text.length;
+
+    if (count === 0) count = 1;
 
     while (startOfLine < count)
     {
@@ -1277,6 +1280,7 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
     y = rect.y + offsetY;
     startOfLine = 0;
     endOfLine   = text.indexOf("\n");
+    if (endOfLine === -1) endOfLine = text.length;
 
     while (startOfLine < count)
     {
@@ -1291,98 +1295,6 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
         startOfLine = endOfLine + 1;
         endOfLine   = text.indexOf("\n", startOfLine);
         if (endOfLine === -1) endOfLine = text.length;
-    }
-
-    scissor_pop();
-}
-
-
-
-
-
-
-
-
-
-
-////////////////////////////////////////////////////////////
-export function gui_text_input(id: number, rect: Rect, z: number, s: string)
-{
-    let hasBeenCreatedThisFrame: boolean   = false;
-    let context                : UiContext = null as unknown as UiContext;
-
-    if (_contexts.has(id) === false)
-    {
-        context      = get_context();
-        context.text  = s;
-        context.scale = 4;
-        _contexts.set(id, context);
-        hasBeenCreatedThisFrame = true;
-    }
-    else
-    {
-        context = _contexts.get(id) as UiContext;
-    }
-
-    let widget: UiWidget =
-    {
-        id  : id,
-        rect: rect,
-        z   : z,
-
-        capabilities: UiWidgetCapability.HOVERABLE | UiWidgetCapability.CLICKABLE | UiWidgetCapability.ACTIVABLE | UiWidgetCapability.TEXT,
-        state       : 0,
-
-        text: context.text,
-    };
-
-    if (widget.id === _activeWidgetId)  widget.state |= UiWidgetState.GRABBED;
-    if (widget.id === _hoveredWidgetId) widget.state |= UiWidgetState.HOVERED;
-    if (widget.id === _clickedWidgetId) widget.state |= UiWidgetState.CLICKED;
-    if (hasBeenCreatedThisFrame)        widget.state |= UiWidgetState.CREATED_THIS_FRAME;
-
-    if (widget.id === _activeWidgetIdLastFrame && widget.id !== _activeWidgetId) widget.state |= UiWidgetState.DEACTIVATED_THIS_FRAME;
-    if (widget.id !== _activeWidgetIdLastFrame && widget.id === _activeWidgetId) widget.state |= UiWidgetState.ACTIVATED_THIS_FRAME;
-
-    _currentFrameWidget.push(widget);
-
-    return widget;
-}
-
-
-
-////////////////////////////////////////////////////////////
-export function gui_text_input_draw(widget: UiWidget)
-{
-    let context = widget_context_of(widget);
-
-    let x     = widget.rect.x + context.offsetX;
-    let y     = widget.rect.y;
-    let z     = widget.z;
-    let text  = widget.text;
-    let scale = context.scale;
-
-    scissor_push(widget.rect);
-    draw_quad(widget.rect, z, to_color(0, 0, 0, 1));
-
-
-    for (let i=0; i < text.length ;i+=1)
-    {
-        font_draw_ascii(x, y, z+1, _defaultFont, scale, text[i]);
-
-        if (i === context.cursorPosition)
-        {
-            let cursorRect = to_rect(x, y, scale, scale*10);
-            draw_quad(cursorRect, z+2, to_color(1, 0, 0, 1));
-        }
-
-        x += scale*6;
-    }
-
-    if (context.cursorPosition >= text.length)
-    {
-        let cursorRect = to_rect(x, y, scale, scale*10);
-        draw_quad(cursorRect, z+2, to_color(1, 0, 0, 1));
     }
 
     scissor_pop();
