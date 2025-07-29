@@ -178,10 +178,9 @@ export function gui_init_frame()
 ////////////////////////////////////////////////////////////
 export function gui_process_event(events: GameEvent[]): GameEvent[]
 {
-    let unProcessedEvents: GameEvent[] = [];
-
-    for (let event of events)
+    for (let i=events.length-1; i >= 0 ;i-=1)
     {
+        let event                 = events[i];
         let hasEventBeenProcessed = false;
 
         if (event.type === GameEventType.KEY)
@@ -257,9 +256,8 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
             }
         }
 
-        if (hasEventBeenProcessed === false)
-            unProcessedEvents.push(event);
-
+        if (hasEventBeenProcessed)
+            events.length -= 1;
     }
 
     if (_isGrabbing            &&
@@ -271,8 +269,7 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
     }
 
 
-
-    return unProcessedEvents;
+    return events;
 }
 
 
