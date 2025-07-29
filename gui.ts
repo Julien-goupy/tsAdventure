@@ -246,8 +246,6 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
                 }
             }
 
-
-
             if (event_is_keyboard(event) &&
                 event.isPressed          &&
                 _activeWidgetId !== -1   &&
@@ -357,10 +355,45 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
         else if (eventType === UiWidgetInternalEvent.DELTA_MOUSE)
         {
+            let AUTO_SCROLL_THICKNESS_IN_PIXEL = 3;
+
+            if (mouseX < (rect.x + AUTO_SCROLL_THICKNESS_IN_PIXEL))
+            {
+                context.offsetX += charWidth;
+                if (context.offsetX > 0) context.offsetX = 0;
+            }
+            else if (mouseX > (rect.x + rect.width - AUTO_SCROLL_THICKNESS_IN_PIXEL))
+            {
+                // @Speed
+                let [startOfCursorLine, endOfCursorLine] = _text_get_line_containing_cursor(text, cursorPosition);
+                let lineCount                            = endOfCursorLine - startOfCursorLine;
+                let lineWidth                            = (lineCount + 1) * charWidth;
+                let maxWidth                             = lineWidth - rect.width;
+                if (maxWidth < 0) maxWidth = 0;
+
+                context.offsetX -= charWidth;
+                if (context.offsetX < -maxWidth) context.offsetX = -maxWidth;
+            }
+
+
+            if (mouseY < (rect.y + AUTO_SCROLL_THICKNESS_IN_PIXEL))
+            {
+                context.offsetY += charHeight;
+                if (context.offsetY > 0) context.offsetY = 0;
+            }
+            else if (mouseY > (rect.y + rect.height - AUTO_SCROLL_THICKNESS_IN_PIXEL))
+            {
+                let maxHeight = context.countOfLine * charHeight - rect.height;
+                if (maxHeight < 0) maxHeight = 0;
+
+                context.offsetY -= charHeight;
+                if (context.offsetY < -maxHeight) context.offsetY = -maxHeight;
+            }
+
             let localMouseX = mouseX - (rect.x + context.offsetX);
             let localMouseY = mouseY - (rect.y + context.offsetY);
+
             context.cursorPosition = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
-            hasEventBeenProcessed = true;
         }
 
         else if (eventType === UiWidgetInternalEvent.SCROLL)
@@ -1011,10 +1044,7 @@ function _text_get_line_containing_cursor(s: string, cursorPosition: number): [n
 {
     let startOfLine = s.lastIndexOf("\n", cursorPosition - 1) + 1;
     let endOfLine   = s.indexOf("\n", cursorPosition);
-
-    if (startOfLine === -1) startOfLine = 0;
-    if (endOfLine   === -1) endOfLine   = s.length;
-
+    if (endOfLine === -1) endOfLine = s.length;
     return [startOfLine, endOfLine];
 }
 
