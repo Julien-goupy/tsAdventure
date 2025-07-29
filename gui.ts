@@ -562,14 +562,14 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                 else if (event.key === GameEventKey.ARROW_UP)
                 {
-                    let [startOfLine, endOfLine] = _text_get_line_containing_cursor(text, context.cursorPosition);
+                    let [startOfLine, _]         = _text_get_line_containing_cursor(text, context.cursorPosition);
                     let offsetFromStartOfLine    = context.cursorPosition - startOfLine;
                     let startOfPreviousLine      = 0;
                     let cursorPositionOnNextLine = 0;
 
                     if (startOfLine !== 0)
                     {
-                        [startOfPreviousLine, endOfLine] = _text_get_line_containing_cursor(text, startOfLine - 1);
+                        [startOfPreviousLine, _] = _text_get_line_containing_cursor(text, startOfLine - 1);
                         cursorPositionOnNextLine = _text_get_cursor_or_end_of_line(text, startOfPreviousLine, offsetFromStartOfLine);
                     }
 
@@ -726,8 +726,8 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         let startOfIndent = Math.min(cursorPosition, context.selectionPosition);
                         let endOfIndent   = Math.max(cursorPosition, context.selectionPosition);
 
-                        let startOfLine     = text.lastIndexOf("\n", startOfIndent - 1) + 1;
-                        let startOfLastLine = text.lastIndexOf("\n", endOfIndent   - 1) + 1;
+                        let startOfLine     = _text_start_of_line_for(text, startOfIndent);
+                        let startOfLastLine = _text_start_of_line_for(text, endOfIndent);
 
                         if (event.modifier & GameEventModifier.SHIFT)
                         {
@@ -871,10 +871,9 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
             // console.log(offsetRectInChar);
 
-            let startOfCursorLine = context.text.lastIndexOf("\n", context.cursorPosition - 1) + 1;
-
-            let cursorX = context.cursorPosition - startOfCursorLine;
-            let cursorY = string_count(context.text, "\n", 0, context.cursorPosition);
+            let startOfCursorLine = _text_start_of_line_for(context.text, context.cursorPosition);
+            let cursorX           = context.cursorPosition - startOfCursorLine;
+            let cursorY           = string_count(context.text, "\n", 0, context.cursorPosition);
 
             // console.log(cursorX, cursorY);
 
@@ -1134,12 +1133,20 @@ function _text_push_mutation(rewinder: Rewinder, s: string, startOfDeletion: num
 
 
 
+////////////////////////////////////////////////////////////
+function _text_start_of_line_for(s: string, cursorPosition: number): number
+{
+    let startOfLine = s.lastIndexOf("\n", cursorPosition - 1) + 1;
+    if (cursorPosition === 0) startOfLine = 0;
+    return startOfLine;
+}
 
 
 ////////////////////////////////////////////////////////////
 function _text_get_line_containing_cursor(s: string, cursorPosition: number): [number, number]
 {
     let startOfLine = s.lastIndexOf("\n", cursorPosition - 1) + 1;
+    if (cursorPosition === 0) startOfLine = 0;
     let endOfLine   = s.indexOf("\n", cursorPosition);
     if (endOfLine === -1) endOfLine = s.length;
     return [startOfLine, endOfLine];
@@ -1273,6 +1280,12 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
         startOfLine = endOfLine + 1;
         endOfLine   = text.indexOf("\n", startOfLine);
         if (endOfLine === -1) endOfLine = text.length;
+    }
+
+    if (shouldShowCursor && accumulatedTextLength === cursorPosition)
+    {
+        let cursorRect = to_rect(x - 1, y, scale, lineHeight);
+        draw_quad(cursorRect, widget.z + 2, CURSOR_COLOR);
     }
 
 

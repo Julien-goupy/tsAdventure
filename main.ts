@@ -2,7 +2,7 @@ import { editor_launch } from "./controler/editor";
 import { event_init } from "./event";
 import { font_init } from "./font";
 import { game_render_one_frame } from "./logic";
-import { init_webGL2, renderer_create_buffers, shader_create_program, to_rect } from "./renderer";
+import { init_webGL2, renderer_create_buffers, shader_create_program } from "./renderer";
 
 
 

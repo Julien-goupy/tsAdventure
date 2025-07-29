@@ -70,10 +70,10 @@ export const enum GameEventKey
     _y = 121,
     _z = 122,
 
-    ARROW_LEFT   = 256,
-    ARROW_UP     = 257,
-    ARROW_RIGHT  = 258,
-    ARROW_DOWN = 259,
+    ARROW_LEFT  = 256,
+    ARROW_UP    = 257,
+    ARROW_RIGHT = 258,
+    ARROW_DOWN  = 259,
 
     TAB           = 260,
     ENTER         = 261,

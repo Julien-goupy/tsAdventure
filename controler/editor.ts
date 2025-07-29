@@ -1,4 +1,4 @@
-import {console_toggle} from "../console";
+// import {console_toggle} from "../console";
 import {GameEvent,GameEventKey,GameEventType} from "../event";
 import {_defaultFont,font_get_line_height,font_get_text_dimension} from "../font";
 import {gui_rect,UiWidgetState,UiWidgetCapability,widget_id,widget_context_of,gui_draw_text_editor,widget_context_set_text,widget_component_id,widget_activate} from "../gui";
@@ -389,7 +389,7 @@ function process_event(events: GameEvent[])
         if (it.type === GameEventType.KEY)
         {
             if (it.key === GameEventKey.F5 && it.isPressed) location.reload();
-            if (it.key === GameEventKey.F1 && it.isPressed) console_toggle();
+            // if (it.key === GameEventKey.F1 && it.isPressed) console_toggle();
         }
     }
 }
