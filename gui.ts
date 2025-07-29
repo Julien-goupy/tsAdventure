@@ -653,6 +653,12 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                 else if (event_is_printable(event))
                 {
                     if ((event.modifier & EVENT_COPY_PASTE_KEY) &&
+                         (event.key === GameEventKey._A || event.key === GameEventKey._a))
+                    {
+                        context.cursorPosition    = text.length;
+                        context.selectionPosition = 0;
+                    }
+                    else if ((event.modifier & EVENT_COPY_PASTE_KEY) &&
                          (event.key === GameEventKey._C || event.key === GameEventKey._c))
                     {
                         let startOfCopy = Math.min(context.cursorPosition, context.selectionPosition);
@@ -684,6 +690,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         context.selectionPosition = -1;
 
                         context.countOfLine -= string_count(textToCut, "\n");
+                        hasEventBeenProcessed = true;
                     }
 
                     else if ((event.modifier & EVENT_COPY_PASTE_KEY) &&
@@ -739,9 +746,8 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                         context.selectionPosition = -1;
                         context.countOfLine += string_count(textToInsert, "\n") - string_count(text, "\n", startOfDeletion, endOfDeletion);
+                        hasEventBeenProcessed = true;
                     }
-
-                    hasEventBeenProcessed = true;
                 }
 
                 else if (event.key === GameEventKey.ENTER)
