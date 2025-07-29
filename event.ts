@@ -425,8 +425,8 @@ export function event_init()
             _events.push(event)
     }
 
-    _canvas.addEventListener('mousedown', ev => mousse_button(true, ev));
-    _canvas.addEventListener('mouseup'  , ev => mousse_button(false, ev));
+    document.addEventListener('mousedown', ev => mousse_button(true, ev));
+    document.addEventListener('mouseup'  , ev => mousse_button(false, ev));
     _canvas.addEventListener('mousemove', ev => {mouseX = ev.clientX; mouseY = ev.clientY;});
     _canvas.addEventListener('mouseleave', ev => {mouseX = ev.clientX; mouseY = ev.clientY;});
     document.addEventListener('keydown', ev => keyboard_button(true, ev));

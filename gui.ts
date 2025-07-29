@@ -213,16 +213,16 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
                 {
                     _isGrabbing = false;
 
+                    if (_activeWidgetId !== -1 && (_activeWidget.capabilities & UiWidgetCapability.GRABBABLE))
+                    {
+                        _widget_proc(_activeWidget, UiWidgetInternalEvent.UN_GRABBED, null);
+                    }
+
                     if (_activeWidgetId !== -1 && (_activeWidget.capabilities & UiWidgetCapability.CLICKABLE) === UiWidgetCapability.CLICKABLE)
                     {
                         if (_hoveredWidgetId === _activeWidgetId)
                         {
                             _clickedWidgetId = _hoveredWidgetId;
-                        }
-
-                        if (_activeWidget.capabilities & UiWidgetCapability.GRABBABLE)
-                        {
-                            _widget_proc(_activeWidget, UiWidgetInternalEvent.UN_GRABBED, null);
                         }
 
                         if ((_activeWidget.capabilities & UiWidgetCapability.ACTIVABLE) === 0)
@@ -718,6 +718,97 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                         context.selectionPosition = -1;
                         hasEventBeenProcessed     = true;
+                    }
+
+                    else if (event.key === GameEventKey.TAB   &&
+                             context.selectionPosition !== -1  )
+                    {
+                        let startOfIndent = Math.min(cursorPosition, context.selectionPosition);
+                        let endOfIndent   = Math.max(cursorPosition, context.selectionPosition);
+
+                        let startOfLine     = text.lastIndexOf("\n", startOfIndent - 1) + 1;
+                        let startOfLastLine = text.lastIndexOf("\n", endOfIndent   - 1) + 1;
+
+                        if (event.modifier & GameEventModifier.SHIFT)
+                        {
+                            let countOfSpaceDeleted = 0;
+
+                            while (startOfLine !== startOfLastLine)
+                            {
+                                if(text.charCodeAt(startOfLine) !== 32)
+                                {
+                                    startOfLine += 1;
+                                    continue;
+                                }
+
+                                let countOfSpaceAtTheBeginingOfTheLine = 0;
+                                while (text.charCodeAt(startOfLine + countOfSpaceAtTheBeginingOfTheLine) === 32)
+                                    countOfSpaceAtTheBeginingOfTheLine += 1;
+
+                                if (countOfSpaceAtTheBeginingOfTheLine > 4) countOfSpaceAtTheBeginingOfTheLine = 4;
+
+                                text        = _text_delete_insert(text, startOfLine, startOfLine + countOfSpaceAtTheBeginingOfTheLine, "");
+                                startOfLine = text.indexOf("\n", startOfLine) + 1;
+                                startOfLastLine     -= countOfSpaceAtTheBeginingOfTheLine;
+                                countOfSpaceDeleted += countOfSpaceAtTheBeginingOfTheLine;
+                            }
+
+                            {
+                                let countOfSpaceAtTheBeginingOfTheLine = 0;
+                                while (text.charCodeAt(startOfLine + countOfSpaceAtTheBeginingOfTheLine) === 32)
+                                    countOfSpaceAtTheBeginingOfTheLine += 1;
+
+                                if (countOfSpaceAtTheBeginingOfTheLine > 4) countOfSpaceAtTheBeginingOfTheLine = 4;
+
+                                text = _text_delete_insert(text, startOfLine, startOfLine + countOfSpaceAtTheBeginingOfTheLine, "");
+                                countOfSpaceDeleted += countOfSpaceAtTheBeginingOfTheLine;
+                            }
+
+                            if (context.cursorPosition < context.selectionPosition)
+                            {
+                                context.cursorPosition    -= 4;
+                                context.selectionPosition -= countOfSpaceDeleted;
+                            }
+                            else
+                            {
+                                context.cursorPosition    -= countOfSpaceDeleted;
+                                context.selectionPosition -= 4;
+                            }
+                        }
+                        else
+                        {
+                            let countOfLineIndented = 1;
+
+                            while (startOfLine !== startOfLastLine)
+                            {
+                                let endOfLine = text.indexOf("\n", startOfLine) + 1;
+                                if ((endOfLine - startOfLine) === 1)
+                                {
+                                    startOfLine += 1;
+                                    continue;
+                                }
+
+                                text        = _text_delete_insert(text, startOfLine, startOfLine, "    ");
+                                startOfLine = endOfLine + 4;
+                                startOfLastLine     += 4;
+                                countOfLineIndented += 1;
+                            }
+
+                            text = _text_delete_insert(text, startOfLine, startOfLine, "    ");
+
+                            if (context.cursorPosition < context.selectionPosition)
+                            {
+                                context.cursorPosition    += 4;
+                                context.selectionPosition += 4*countOfLineIndented;
+                            }
+                            else
+                            {
+                                context.cursorPosition    += 4*countOfLineIndented;
+                                context.selectionPosition += 4;
+                            }
+                        }
+
+                        context.text = text;
                     }
 
                     else
