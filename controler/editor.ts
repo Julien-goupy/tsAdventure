@@ -43,7 +43,7 @@ function tab_type_from_name(s: string): TabType
 
 
 ////////////////////////////////////////////////////////////
-function tab_draw_text(rect: Rect, tab: FileSystemItem, forceActivate: boolean =false)
+function tab_draw_text(rect: Rect, tab: FileSystemItem)
 {
     if (tab.data === null) tab.data = "";
     let text = tab.data as string;
@@ -61,7 +61,8 @@ function tab_draw_text(rect: Rect, tab: FileSystemItem, forceActivate: boolean =
     }
 
     gui_draw_text_editor(widget);
-    if (forceActivate) widget_activate(widget);
+    if (_hasChangedTab) widget_activate(widget);
+    _hasChangedTab = false;
 }
 
 
@@ -141,6 +142,7 @@ function file_tree_recursive_flatten(item: FileSystemItem, flatFileTree: FileSys
 let _fileSystemRoot : FileSystemItem   = null as unknown as FileSystemItem;
 let _openedTabs     : FileSystemItem[] = [];
 let _selectedTab    : FileSystemItem   = null as unknown as FileSystemItem;
+let _hasChangedTab  : boolean          = false;
 let _flattenFileTree: FileSystemItem[] = [];
 
 
@@ -407,7 +409,6 @@ function simulate(elapsedTime: number, frameId: number)
 ////////////////////////////////////////////////////////////
 function draw(windowRect: Rect, frameId: number)
 {
-    let hasChangedTabOnThisFrame = false;
 
     if (false)
     {
@@ -465,8 +466,8 @@ function draw(windowRect: Rect, frameId: number)
 
                     if (tabWidget.state & UiWidgetState.CLICKED)
                     {
-                        _selectedTab             = tab;
-                        hasChangedTabOnThisFrame = true;
+                        _selectedTab   = tab;
+                        _hasChangedTab = true;
                     }
 
                     draw_quad(thisTabRect, 2, tabBackgroundColor);
@@ -509,7 +510,7 @@ function draw(windowRect: Rect, frameId: number)
             // Render data of file for edition
             if (_selectedTab !== null)
             {
-                if (tab_type_from_name(_selectedTab.name)) tab_draw_text(editorRect, _selectedTab, hasChangedTabOnThisFrame);
+                if (tab_type_from_name(_selectedTab.name)) tab_draw_text(editorRect, _selectedTab);
             }
         }
 
@@ -587,6 +588,7 @@ function draw(windowRect: Rect, frameId: number)
                             {
                                 item.flag |= FileSystemFlag.OPENED_IN_EDITOR;
                                 _openedTabs.push(item);
+                                _hasChangedTab = true;
                             }
 
                             _selectedTab = item;

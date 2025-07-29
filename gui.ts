@@ -315,6 +315,12 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
         if (eventType === UiWidgetInternalEvent.ACTIVATION)
         {
+            if (cursorPosition === -1)
+            {
+                cursorPosition         = 0;
+                context.cursorPosition = 0;
+            }
+
             console.log("Text ACTIVATION");
             // @Incomplete:
             //     Add option to be set at the start or at the end
@@ -1146,7 +1152,7 @@ function _find_cursor_position(s: Uint32Array, font: MonoFont, scale: number, x:
         if (lineNumber === cursorY)
         {
             if (endOfLine === -1)
-                endOfLine = s.length;
+                endOfLine = s[0];
 
             let lineCount    = endOfLine - startOfLine;
             let cursorOffset = cursorX;
@@ -1162,7 +1168,7 @@ function _find_cursor_position(s: Uint32Array, font: MonoFont, scale: number, x:
 
     if (cursorPosition === -1)
     {
-            if (y > 0) cursorPosition = s.length;
+            if (y > 0) cursorPosition = s[0];
             else       cursorPosition = 0;
     }
     return cursorPosition;
@@ -1172,9 +1178,9 @@ function _find_cursor_position(s: Uint32Array, font: MonoFont, scale: number, x:
 ////////////////////////////////////////////////////////////
 function _text_delete_insert(s: Uint32Array, startOfDeletion: number, endOfDeletion: number, insertion: Uint32Array)
 {
-    s.copyWithin(startOfDeletion + insertion.length + 1, endOfDeletion + 1);
+    s.copyWithin(startOfDeletion + insertion[0] + 1, endOfDeletion + 1);
     s.set(insertion, startOfDeletion + 1);
-    s[0] += insertion.length - (endOfDeletion - startOfDeletion);
+    s[0] += insertion[0] - (endOfDeletion - startOfDeletion);
 }
 
 
@@ -1229,7 +1235,7 @@ function _text_get_line_containing_cursor(s: Uint32Array, cursorPosition: number
     let startOfLine = buffer_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
     if (cursorPosition === 0) startOfLine = 0;
     let endOfLine   = buffer_index_of(s, UTF32_NEW_LINE, cursorPosition);
-    if (endOfLine === -1) endOfLine = s.length;
+    if (endOfLine === -1) endOfLine = s[0];
     return [startOfLine, endOfLine];
 }
 
@@ -1238,7 +1244,7 @@ function _text_get_line_containing_cursor(s: Uint32Array, cursorPosition: number
 function _text_get_cursor_or_end_of_line(s: Uint32Array, startOfLine: number, offset: number): number
 {
     let endOfLine = buffer_index_of(s, UTF32_NEW_LINE, startOfLine);
-    if (endOfLine === -1) endOfLine = s.length;
+    if (endOfLine === -1) endOfLine = s[0];
     let lineCount = endOfLine - startOfLine;
     if (offset > lineCount) offset = lineCount;
     return startOfLine + offset;
@@ -1325,7 +1331,7 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
     let endOfLine   = buffer_index_of(text, UTF32_NEW_LINE);
     if (endOfLine === -1) endOfLine = count;
 
-    if (count === 0) count = 1;
+    // if (count === 0) count = 1;
 
     while (startOfLine < count)
     {
