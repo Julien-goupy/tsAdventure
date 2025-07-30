@@ -76,10 +76,12 @@ export const UTF32_NEW_LINE = 10;
 ////////////////////////////////////////////////////////////
 export function string_utf32_count(haystack: Uint32Array, needle: number, startOfSearch: number =0, endOfSearch: number =-1): number
 {
-    if (endOfSearch === -1) endOfSearch = haystack.length;
+    startOfSearch += 1;
+    if (endOfSearch === -1) endOfSearch = haystack[0];
+    else                    endOfSearch +=1;
     let occurenceCount = 0;
     let i              = 0;
-    let haystackCount  = haystack.length;
+    let haystackCount  = haystack[0];
 
     while (i < haystackCount)
     {

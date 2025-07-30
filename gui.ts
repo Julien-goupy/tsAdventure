@@ -371,7 +371,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
         else if (eventType === UiWidgetInternalEvent.DELTA_MOUSE)
         {
-            let AUTO_SCROLL_THICKNESS_IN_PIXEL = 3;
+            const AUTO_SCROLL_THICKNESS_IN_PIXEL = 3;
 
             if (mouseX < (rect.x + AUTO_SCROLL_THICKNESS_IN_PIXEL))
             {
@@ -1317,6 +1317,15 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
     let cursorPosition          = context.cursorPosition;
     let selectionCursorPosition = context.selectionPosition;
     let shouldShowCursor        = (Math.round((_nowUs - _lastInteractionTimeUs) / 500_000) & 1) === 0;
+    let totalHeight             = context.countOfLine * lineHeight;
+
+    let hasScrollBarX           = false;
+    let hasScrollBarY           = totalHeight > rect.height;
+    let sizeOfScrollCursorX     = 0;
+    let sizeOfScrollCursorY     = (rect.height / totalHeight) * rect.height;
+    let offsetOfScrollCursorX   = 0;
+    let offsetOfScrollCursorY   = (-offsetY) / totalHeight * rect.height;
+    let scrollBarThickness      = Math.round(lineHeight * 0.7);
 
     let startOfSelection = -1;
     let endOfSelection   = -1;
@@ -1409,4 +1418,12 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
     }
 
     scissor_pop();
+
+    if (hasScrollBarY)
+    {
+        let backgroundScrollBarRect = to_rect(rect.x + rect.width - scrollBarThickness, rect.y                        , scrollBarThickness, rect.height);
+        let scrollBarCursorRect     = to_rect(rect.x + rect.width - scrollBarThickness, rect.y + offsetOfScrollCursorY, scrollBarThickness, sizeOfScrollCursorY);
+        draw_quad(backgroundScrollBarRect, widget.z + 5, BACKGROUND_COLOR);
+        draw_quad(scrollBarCursorRect    , widget.z + 6, TEXT_COLOR);
+    }
 }
