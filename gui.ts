@@ -435,11 +435,12 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             else
             {
                 context.isScrolling = true;
-
+                let scrollY = event.data as number;
                 // @ts-ignore
                 if (event.key === GameEventKey.MOUSSE_SCROLL_UP)
                 {
-                    context.offsetY += charHeight;
+                    // context.offsetY += charHeight;
+                    context.offsetY -= scrollY;
                     if (context.offsetY > 0) context.offsetY = 0;
                 }
                 // @ts-ignore
@@ -448,7 +449,8 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                     let maxHeight = context.countOfLine * charHeight - rect.height;
                     if (maxHeight < 0) maxHeight = 0;
 
-                    context.offsetY -= charHeight;
+                    // context.offsetY -= charHeight;
+                    context.offsetY -= scrollY;
                     if (context.offsetY < -maxHeight) context.offsetY = -maxHeight;
                 }
             }

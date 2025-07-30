@@ -203,7 +203,6 @@ export function event_init()
     {
         browserEvent.preventDefault();
 
-
         let key: GameEventKey = GameEventKey.MOUSSE_SCROLL_UP;
         if (browserEvent.deltaY > 0) key = GameEventKey.MOUSSE_SCROLL_DOWN;
 
@@ -212,7 +211,7 @@ export function event_init()
                                     key      : key,
                                     isPressed: true,
                                     modifier : _modifier,
-                                    data     : null
+                                    data     : browserEvent.deltaY // on macOS at least
                                };
         _events.push(event);
     }
@@ -411,11 +410,6 @@ export function event_init()
             event.key  = browserEvent.key.charCodeAt(0);
         }
 
-
-
-
-
-
         event.modifier = _modifier;
 
         if (event.type !== GameEventType.NONE)
@@ -428,7 +422,7 @@ export function event_init()
     _canvas.addEventListener('mouseleave', ev => {mouseX = ev.clientX; mouseY = ev.clientY;});
     document.addEventListener('keydown'  , ev => keyboard_button(true, ev));
     document.addEventListener('keyup'    , ev => keyboard_button(false, ev));
-    document.addEventListener('wheel'    , (event: WheelEvent) => mousse_scroll(event), { passive: false });
+    document.addEventListener('wheel'    , ev => mousse_scroll(ev), { passive: false });
 }
 
 
@@ -493,7 +487,7 @@ export function event_get_frame_event(): GameEvent[]
                                         key      : it.key,
                                         isPressed: it.isPressed,
                                         modifier : it.modifier,
-                                        data     : null
+                                        data     : it.data
                                     };
             frameEvents.push(newEvent);
         }
