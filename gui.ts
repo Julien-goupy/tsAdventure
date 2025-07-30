@@ -1139,7 +1139,7 @@ function _find_cursor_position(s: Uint32Array, font: MonoFont, scale: number, x:
     let cursorPosition = -1;
     let glyphWidth     = font.width  * scale;
     let lineHeight     = font.height * scale;
-    let cursorX        = Math.round(x / glyphWidth + 0.4);
+    let cursorX        = Math.round(x / glyphWidth);
     let cursorY        = Math.floor(y / lineHeight);
     let startOfLine    = 0;
     let endOfLine      = 0;
@@ -1305,7 +1305,7 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
     let offsetY                 = context.offsetY;
     let rect                    = widget.rect;
     let scale                   = context.scale;
-    let startingX               = rect.x + offsetX + scale;
+    let startingX               = rect.x + offsetX;
     let x                       = startingX;
     let y                       = rect.y + offsetY;
     let font                    = _defaultFont;
@@ -1346,7 +1346,9 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
 
             if (shouldShowCursor && accumulatedTextLength === cursorPosition)
             {
-                let cursorRect = to_rect(x-1, y, scale, lineHeight);
+                let cursorX = x-1;
+                if (cursorX < rect.x) cursorX = rect.x;
+                let cursorRect = to_rect(cursorX, y, scale, lineHeight);
                 draw_quad(cursorRect, widget.z + 3, CURSOR_COLOR);
             }
 
@@ -1356,7 +1358,9 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
 
         if (shouldShowCursor && accumulatedTextLength === cursorPosition)
         {
-            let cursorRect = to_rect(x - 1, y, scale, lineHeight);
+            let cursorX = x-1;
+            if (cursorX < rect.x) cursorX = rect.x;
+            let cursorRect = to_rect(cursorX, y, scale, lineHeight);
             draw_quad(cursorRect, widget.z + 2, CURSOR_COLOR);
         }
 
@@ -1374,7 +1378,9 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
 
     if (shouldShowCursor && accumulatedTextLength === cursorPosition)
     {
-        let cursorRect = to_rect(x - 1, y, scale, lineHeight);
+        let cursorX = x-1;
+        if (cursorX < rect.x) cursorX = rect.x;
+        let cursorRect = to_rect(cursorX, y, scale, lineHeight);
         draw_quad(cursorRect, widget.z + 2, CURSOR_COLOR);
     }
 
