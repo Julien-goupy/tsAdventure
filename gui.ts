@@ -110,7 +110,6 @@ let _contexts               : Map<number, UiContext> = new Map();
 let _lastInteractionTimeUs: number = 0;
 let _clickedWidgetId      : number = -1;
 
-let _copyCutPasteModifier = GameEventModifier.CONTROL;
 let _textWordNavigation   = GameEventModifier.CONTROL;
 // let _textLineNavigation   = GameEventModifier.CONTROL;
 
@@ -150,10 +149,7 @@ function get_context(): UiContext
 export function gui_init()
 {
     if (platform_get() & Platform.APPLE)
-    {
-        _copyCutPasteModifier = GameEventModifier.META;
-        _textWordNavigation   = GameEventModifier.OPTION;
-    }
+        _textWordNavigation = GameEventModifier.OPTION;
 }
 
 
@@ -437,6 +433,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             else
             {
                 context.isScrolling = true;
+                // @ts-ignore
                 let scrollY = event.data as number;
                 // @ts-ignore
                 if (event.key === GameEventKey.MOUSSE_SCROLL_UP)
@@ -467,7 +464,6 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
         else if (eventType === UiWidgetInternalEvent.TEXT)
         {
-            // console.log("Text TEXT");
             if (event === null)
             {
                 console.error(`Text input id [${widget.id}] cannot process a null TEXT event`);
@@ -645,7 +641,6 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                     context.selectionPosition = -1;
                     hasEventBeenProcessed     = true;
-                    context.countOfLine       -= string_utf32_count(text, UTF32_NEW_LINE, startOfDeletion, endOfDeletion);
                 }
 
                 else if (event.key === GameEventKey.HOME)
@@ -670,82 +665,94 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                     hasEventBeenProcessed  = true;
                 }
 
+                else if (event.key === GameEventKey.SELECT_ALL)
+                {
+                    context.cursorPosition    = text[0];
+                    context.selectionPosition = 0;
+                }
+
+                else if (event.key === GameEventKey.COPY)
+                {
+                    let startOfCopy = Math.min(context.cursorPosition, context.selectionPosition);
+                    let endOfCopy   = Math.max(context.cursorPosition, context.selectionPosition);
+
+                    if (context.selectionPosition === -1 || startOfCopy === endOfCopy)
+                    {
+                        [startOfCopy, endOfCopy] = _text_get_line_containing_cursor(text, context.cursorPosition);
+                    }
+
+                    let textView = text.slice(1+startOfCopy, 1+endOfCopy);
+                    let asString = String.fromCodePoint(...textView);
+                    clipboard_push(asString);
+                }
+
+                else if (event.key === GameEventKey.CUT)
+                {
+                    let startOfCopy = Math.min(context.cursorPosition, context.selectionPosition);
+                    let endOfCopy   = Math.max(context.cursorPosition, context.selectionPosition);
+
+                    if (context.selectionPosition === -1 || startOfCopy === endOfCopy)
+                    {
+                        [startOfCopy, endOfCopy] = _text_get_line_containing_cursor(text, context.cursorPosition);
+                    }
+
+                    let textView = text.slice(1+startOfCopy, 1+endOfCopy);
+                    let asString = String.fromCodePoint(...textView);
+                    clipboard_push(asString);
+
+                    // _text_push_mutation(context.rewinder, text, startOfCopy, endOfCopy, "");
+                    _text_delete_insert_string(text, startOfCopy, endOfCopy, "");
+                    context.cursorPosition    = startOfCopy;
+                    context.selectionPosition = -1;
+                    hasEventBeenProcessed     = true;
+                }
+
+                else if (event.key === GameEventKey.PASTE)
+                {
+                    let pastedText      = event.data as string;
+                    let startOfDeletion = context.cursorPosition;
+                    let endOfDeletion   = context.cursorPosition;
+
+                    if (context.selectionPosition !== -1)
+                    {
+                        startOfDeletion = Math.min(context.selectionPosition, context.cursorPosition);
+                        endOfDeletion   = Math.max(context.selectionPosition, context.cursorPosition);
+                    }
+
+                    _text_delete_insert_string(text, startOfDeletion, endOfDeletion, pastedText);
+                    context.cursorPosition = startOfDeletion + pastedText.length;
+                    hasEventBeenProcessed  = true;
+                }
+
+                else if (event.key === GameEventKey.UNDO)
+                {
+                    if (event.modifier & GameEventModifier.SHIFT)
+                    {
+                        let mutation = rewinder_redo_mutation(context.rewinder);
+                        if (mutation !== null)
+                        {
+                            _text_delete_insert(text, mutation.cursor,  mutation.cursor + mutation.deletedText.length, mutation.insertedText);
+                            context.cursorPosition = mutation.cursor + mutation.insertedText.length;
+                        }
+                    }
+                    else
+                    {
+                        let mutation = rewinder_pop_mutation(context.rewinder);
+                        if (mutation !== null)
+                        {
+
+                            _text_delete_insert(text, mutation.cursor, mutation.cursor + mutation.insertedText.length, mutation.deletedText);
+                            context.cursorPosition = mutation.cursor + mutation.deletedText.length;
+                        }
+                    }
+
+                    context.selectionPosition = -1;
+                    hasEventBeenProcessed     = true;
+                }
+
                 else if (event_is_printable(event))
                 {
-                    if ((event.modifier & _copyCutPasteModifier) &&
-                         (event.key === GameEventKey._A || event.key === GameEventKey._a))
-                    {
-                        context.cursorPosition    = text[0];
-                        context.selectionPosition = 0;
-                    }
-                    else if ((event.modifier & _copyCutPasteModifier) &&
-                         (event.key === GameEventKey._C || event.key === GameEventKey._c))
-                    {
-                        let startOfCopy = Math.min(context.cursorPosition, context.selectionPosition);
-                        let endOfCopy   = Math.max(context.cursorPosition, context.selectionPosition);
-
-                        if (context.selectionPosition === -1 || startOfCopy === endOfCopy)
-                        {
-                            [startOfCopy, endOfCopy] = _text_get_line_containing_cursor(text, context.cursorPosition);
-                        }
-
-                        let textView = text.slice(1+startOfCopy, 1+endOfCopy);
-                        let asString = String.fromCodePoint(...textView);
-                        clipboard_push(asString);
-                    }
-                    else if ((event.modifier & _copyCutPasteModifier) &&
-                         (event.key === GameEventKey._X || event.key === GameEventKey._x))
-                    {
-                        let startOfCopy = Math.min(context.cursorPosition, context.selectionPosition);
-                        let endOfCopy   = Math.max(context.cursorPosition, context.selectionPosition);
-
-                        if (context.selectionPosition === -1 || startOfCopy === endOfCopy)
-                        {
-                            [startOfCopy, endOfCopy] = _text_get_line_containing_cursor(text, context.cursorPosition);
-                        }
-
-                        let textView = text.slice(1+startOfCopy, 1+endOfCopy);
-                        let asString = String.fromCodePoint(...textView);
-                        clipboard_push(asString);
-
-                        // _text_push_mutation(context.rewinder, text, startOfCopy, endOfCopy, "");
-                        _text_delete_insert_string(text, startOfCopy, endOfCopy, "");
-                        context.cursorPosition    = startOfCopy;
-                        context.selectionPosition = -1;
-
-                        context.countOfLine -= string_count(asString, "\n");
-                        hasEventBeenProcessed = true;
-                    }
-
-                    else if ((event.modifier & _copyCutPasteModifier) &&
-                        (event.key === GameEventKey._Z || event.key === GameEventKey._z))
-                    {
-                        if (event.modifier & GameEventModifier.SHIFT)
-                        {
-                            let mutation = rewinder_redo_mutation(context.rewinder);
-                            if (mutation !== null)
-                            {
-                                _text_delete_insert(text, mutation.cursor,  mutation.cursor + mutation.deletedText.length, mutation.insertedText);
-                                context.cursorPosition = mutation.cursor + mutation.insertedText.length;
-                            }
-                        }
-                        else
-                        {
-                            let mutation = rewinder_pop_mutation(context.rewinder);
-                            if (mutation !== null)
-                            {
-
-                                _text_delete_insert(text, mutation.cursor, mutation.cursor + mutation.insertedText.length, mutation.deletedText);
-                                context.cursorPosition = mutation.cursor + mutation.deletedText.length;
-                            }
-                        }
-
-                        context.selectionPosition = -1;
-                        hasEventBeenProcessed     = true;
-                    }
-
-                    else if (event.key === GameEventKey.TAB   &&
-                             context.selectionPosition !== -1  )
+                    if (event.key === GameEventKey.TAB && context.selectionPosition !== -1)
                     {
                         let startOfIndent = Math.min(cursorPosition, context.selectionPosition);
                         let endOfIndent   = Math.max(cursorPosition, context.selectionPosition);
@@ -857,11 +864,6 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         }
 
                         let textToInsert = String.fromCharCode(event.key);
-                        if ((event.modifier & _copyCutPasteModifier) &&
-                            (event.key === GameEventKey._V || event.key === GameEventKey._v))
-                        {
-                        }
-
                         if (event.key === GameEventKey.TAB)
                             textToInsert = "    ";
 
@@ -870,7 +872,6 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         context.cursorPosition = startOfDeletion + textToInsert.length;
 
                         context.selectionPosition = -1;
-                        context.countOfLine += string_count(textToInsert, "\n") - string_utf32_count(text, UTF32_NEW_LINE, startOfDeletion, endOfDeletion);
                         hasEventBeenProcessed = true;
                     }
                 }
@@ -879,15 +880,21 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                 {
                     if (context.cursorPosition >= 0)
                     {
-                        // _text_push_mutation(context.rewinder, text, context.cursorPosition, context.cursorPosition, "\n");
-                        _text_delete_insert_one(text, context.cursorPosition, context.cursorPosition, UTF32_NEW_LINE);
-                        context.cursorPosition += 1;
+                        let startOfDeletion = context.cursorPosition;
+                        let endOfDeletion   = context.cursorPosition;
+
+                        if (context.selectionPosition !== -1)
+                        {
+                            startOfDeletion = Math.min(context.selectionPosition, context.cursorPosition);
+                            endOfDeletion   = Math.max(context.selectionPosition, context.cursorPosition);
+                        }
+
+                        _text_delete_insert_one(text, startOfDeletion, endOfDeletion, UTF32_NEW_LINE);
+                        context.cursorPosition    = startOfDeletion + 1;
+                        context.selectionPosition = -1;
+                        hasEventBeenProcessed     = true;
                     }
-
-                    hasEventBeenProcessed = true;
-                    context.countOfLine += 1;
                 }
-
             }
         }
 
@@ -897,6 +904,32 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             context.cursorPosition >= 0 &&
             context.isScrolling === false)
         {
+            {
+                let buffer    = text;
+                let textCount = buffer[0];
+
+                // @CopyPasta
+                // :computeTextDimensions:
+                let startOfLine      = 0;
+                let countOfLine      = 0;
+                let longestLineCount = 0;
+
+                while (startOfLine < textCount)
+                {
+                    let endOfLine = buffer.indexOf(UTF32_NEW_LINE, startOfLine);
+                    if (endOfLine === -1) endOfLine = textCount;
+
+                    let lineCount = endOfLine - startOfLine;
+                    if (lineCount > longestLineCount) longestLineCount = lineCount;
+
+                    countOfLine += 1;
+                    startOfLine = endOfLine + 1;
+                }
+
+                context.countOfLine      = countOfLine;
+                context.longestLineCount = longestLineCount;
+            }
+
             let offsetRectInChar: Rect = to_rect(context.offsetX, context.offsetY, rect.width, rect.height);
             offsetRectInChar.x = Math.floor(offsetRectInChar.x / charWidth);
             offsetRectInChar.y = Math.floor(offsetRectInChar.y / charHeight);
@@ -997,24 +1030,28 @@ export function widget_context_set_text(context: UiContext, s: string)
     buffer[0]      = textCount;
     context.buffer = buffer;
 
-    let startOfLine      = 0;
-    let countOfLine      = 0;
-    let longestLineCount = 0;
-
-    while (startOfLine < textCount)
     {
-        let endOfLine = buffer.indexOf(UTF32_NEW_LINE, startOfLine);
-        if (endOfLine === -1) endOfLine = textCount;
+        // @CopyPasta
+        // :computeTextDimensions:
+        let startOfLine      = 0;
+        let countOfLine      = 0;
+        let longestLineCount = 0;
 
-        let lineCount = endOfLine - startOfLine;
-        if (lineCount > longestLineCount) longestLineCount = lineCount;
+        while (startOfLine < textCount)
+        {
+            let endOfLine = buffer.indexOf(UTF32_NEW_LINE, startOfLine);
+            if (endOfLine === -1) endOfLine = textCount;
 
-        countOfLine += 1;
-        startOfLine = endOfLine + 1;
+            let lineCount = endOfLine - startOfLine;
+            if (lineCount > longestLineCount) longestLineCount = lineCount;
+
+            countOfLine += 1;
+            startOfLine = endOfLine + 1;
+        }
+
+        context.countOfLine      = countOfLine;
+        context.longestLineCount = longestLineCount;
     }
-
-    context.countOfLine      = countOfLine;
-    context.longestLineCount = longestLineCount;
 }
 
 

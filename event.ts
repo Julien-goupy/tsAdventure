@@ -93,6 +93,13 @@ export const enum GameEventKey
     ALT_GR        = 275,
     META          = 276, // window key on windows
 
+    COPY       = 290,
+    CUT        = 291,
+    PASTE      = 296,
+    UNDO       = 293,
+    REDO       = 294,
+    SELECT_ALL = 295,
+
     F1  = 301,
     F2  = 302,
     F3  = 303,
@@ -146,11 +153,16 @@ let _modifier: GameEventModifier = GameEventModifier.NONE;
 export let _events: GameEvent[] = []
 export let mouseX : number      = 0;
 export let mouseY : number      = 0;
+let _copyCutPasteModifier = GameEventModifier.CONTROL;
 
 
 ////////////////////////////////////////////////////////////
-export function event_init()
+export async function event_init()
 {
+    if (platform_get() & Platform.APPLE)
+        _copyCutPasteModifier = GameEventModifier.META;
+
+
     function mousse_button(isPressed: boolean, browserEvent: MouseEvent)
     {
         browserEvent.preventDefault();
@@ -229,85 +241,87 @@ export function event_init()
                                     data     : null
                                };
 
-        if (browserEvent.key === 'ArrowLeft')
+        let key = browserEvent.key;
+
+        if (key === 'ArrowLeft')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.ARROW_LEFT;
         }
-        else if (browserEvent.key === 'ArrowUp')
+        else if (key === 'ArrowUp')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.ARROW_UP;
         }
-        else if (browserEvent.key === 'ArrowRight')
+        else if (key === 'ArrowRight')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.ARROW_RIGHT;
         }
-        else if (browserEvent.key === 'ArrowDown')
+        else if (key === 'ArrowDown')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.ARROW_DOWN;
         }
-        else if (browserEvent.key === 'Tab')
+        else if (key === 'Tab')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.TAB;
         }
-        else if (browserEvent.key === 'Enter')
+        else if (key === 'Enter')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.ENTER;
         }
-        else if (browserEvent.key === 'End')
+        else if (key === 'End')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.END;
         }
-        else if (browserEvent.key === 'Home')
+        else if (key === 'Home')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.HOME;
         }
-        else if (browserEvent.key === 'PageDown')
+        else if (key === 'PageDown')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.PAGE_DOWN;
         }
-        else if (browserEvent.key === 'PageUp')
+        else if (key === 'PageUp')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.PAGE_UP;
         }
-        else if (browserEvent.key === 'Backspace')
+        else if (key === 'Backspace')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.BACKSPACE;
         }
-        else if (browserEvent.key === 'Delete')
+        else if (key === 'Delete')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.DELETE;
         }
-        else if (browserEvent.key === 'Escape')
+        else if (key === 'Escape')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.ESCAPE;
         }
-        else if (browserEvent.key === 'Insert')
+        else if (key === 'Insert')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.INSERT;
         }
-        else if (browserEvent.key === 'Shift')
+        else if (key === 'Shift')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.SHIFT;
 
-            if (isPressed) _modifier |= GameEventModifier.SHIFT;
+            if (isPressed) _modifier |=  GameEventModifier.SHIFT;
             else           _modifier &= ~GameEventModifier.SHIFT;
         }
-        else if (browserEvent.key === 'CapsLock')
+        else if (key === 'CapsLock')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.CAPS_LOCK;
@@ -317,7 +331,7 @@ export function event_init()
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.CONTROL;
 
-            if (isPressed) _modifier |= GameEventModifier.CONTROL;
+            if (isPressed) _modifier |=  GameEventModifier.CONTROL;
             else           _modifier &= ~GameEventModifier.CONTROL;
         }
         else if (browserEvent.code === 'ControlRight')
@@ -325,89 +339,141 @@ export function event_init()
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.RIGHT_CONTROL;
         }
-        else if (browserEvent.key === 'Alt')
+        else if (key === 'Alt')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.ALT;
 
-            if (isPressed) _modifier |= GameEventModifier.ALT;
+            if (isPressed) _modifier |=  GameEventModifier.ALT;
             else           _modifier &= ~GameEventModifier.ALT;
         }
-        else if (browserEvent.key === 'AltGraph')
+        else if (key === 'AltGraph')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.ALT_GR;
         }
-        else if (browserEvent.key === 'Meta')
+        else if (key === 'Meta')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.META;
 
-            if (isPressed) _modifier |= GameEventModifier.META;
+            if (isPressed) _modifier |=  GameEventModifier.META;
             else           _modifier &= ~GameEventModifier.META;
         }
 
 
-        else if (browserEvent.key === 'F1')
+        else if (key === 'F1')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.F1;
         }
-        else if (browserEvent.key === 'F2')
+        else if (key === 'F2')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.F2;
         }
-        else if (browserEvent.key === 'F3')
+        else if (key === 'F3')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.F3;
         }
-        else if (browserEvent.key === 'F5')
+        else if (key === 'F5')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.F5;
         }
-        else if (browserEvent.key === 'F6')
+        else if (key === 'F6')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.F6;
         }
-        else if (browserEvent.key === 'F7')
+        else if (key === 'F7')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.F7;
         }
-        else if (browserEvent.key === 'F8')
+        else if (key === 'F8')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.F8;
         }
-        else if (browserEvent.key === 'F9')
+        else if (key === 'F9')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.F9;
         }
-        else if (browserEvent.key === 'F10')
+        else if (key === 'F10')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.F10;
         }
-        else if (browserEvent.key === 'F11')
+        else if (key === 'F11')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.F11;
         }
-        else if (browserEvent.key === 'F12')
+        else if (key === 'F12')
         {
             event.type = GameEventType.KEY;
             event.key  = GameEventKey.F12;
         }
-        else if (browserEvent.key)
+        else if (key)
         {
-            console.log("key", browserEvent.key);
-            event.type = GameEventType.KEY;
-            event.key  = browserEvent.key.charCodeAt(0);
+            let isCombo    = false;
+            let unicodeKey = key.charCodeAt(0);
+
+            if (_modifier & _copyCutPasteModifier)
+            {
+                if (unicodeKey === GameEventKey._Z || unicodeKey === GameEventKey._z)
+                {
+                    isCombo = true;
+                    event.type = GameEventType.KEY;
+                    event.key  = GameEventKey.UNDO;
+                    if (_modifier & GameEventModifier.SHIFT)
+                        event.key = GameEventKey.REDO;
+                }
+
+                else if (unicodeKey === GameEventKey._A || unicodeKey === GameEventKey._a)
+                {
+                    isCombo = true;
+                    event.type = GameEventType.KEY;
+                    event.key  = GameEventKey.SELECT_ALL;
+                }
+
+                else if (unicodeKey === GameEventKey._X || unicodeKey === GameEventKey._x)
+                {
+                    isCombo = true;
+                    event.type = GameEventType.KEY;
+                    event.key  = GameEventKey.CUT;
+                }
+
+                else if (unicodeKey === GameEventKey._C || unicodeKey === GameEventKey._c)
+                {
+                    isCombo = true;
+                    event.type = GameEventType.KEY;
+                    event.key  = GameEventKey.COPY;
+                }
+
+                else if (unicodeKey === GameEventKey._V || unicodeKey === GameEventKey._v)
+                {
+                    navigator.clipboard.readText().then(
+                        (value: string) => {
+                                                        event.type = GameEventType.KEY;
+                                                        event.key  = GameEventKey.PASTE;
+                                                        event.data = value;
+                                                        _events.push(event);
+                                                    }
+                        );
+                    isCombo = true;
+                }
+            }
+
+            if (isCombo === false)
+            {
+                console.log("key", key);
+                event.type = GameEventType.KEY;
+                event.key  = key.charCodeAt(0);
+            }
         }
 
         event.modifier = _modifier;
@@ -543,4 +609,4 @@ export function clipboard_push(s: string)
             console.log(error.toString());
         }
     }
-};
+}
