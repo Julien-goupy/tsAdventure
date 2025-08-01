@@ -77,6 +77,7 @@ interface UiContext
     font             : MonoFont;
     scale            : number;
     countOfLine      : number;
+    longestLineCount : number;
     cursorPosition   : number;
     selectionPosition: number;
 
@@ -121,12 +122,13 @@ function get_context(): UiContext
         scale            : 1,
         text             : null as unknown as string,
         buffer           : null as unknown as Uint32Array,
-        bufferCount      : 0,
-        countOfLine      : 0,
+        bufferCount      :  0,
+        countOfLine      :  0,
+        longestLineCount :  0,
         cursorPosition   : -1,
         selectionPosition: -1,
-        offsetX          : 0,
-        offsetY          : 0,
+        offsetX          :  0,
+        offsetY          :  0,
         isScrolling      : false,
         rewinder         : rewinder_get()
     };
@@ -983,18 +985,36 @@ export function widget_context_set_text(context: UiContext, s: string)
 {
     // Allocate 512Kb per 512Kb. If seems a good compromise between memory and few realloc
     // Allocate 512Kb of utf32 data as minimum.
-    let bufferCapacity = s.length;
+    let textCount      = s.length;
+    let bufferCapacity = textCount;
     if (bufferCapacity < 128*1024) bufferCapacity = 128*1024;
     else                           bufferCapacity = Math.ceil(s.length / (128*1024)) * 128*1024;
     let buffer = new Uint32Array(bufferCapacity);
 
-    for (let i=0; i < s.length ;i+=1)
+    for (let i=0; i < textCount ;i+=1)
         buffer[i+1] = s.charCodeAt(i);
 
-    buffer[0]      = s.length;
+    buffer[0]      = textCount;
     context.buffer = buffer;
-    // context.text        = s;
-    context.countOfLine = string_utf32_count(buffer, UTF32_NEW_LINE) + 1;
+
+    let startOfLine      = 0;
+    let countOfLine      = 0;
+    let longestLineCount = 0;
+
+    while (startOfLine < textCount)
+    {
+        let endOfLine = buffer.indexOf(UTF32_NEW_LINE, startOfLine);
+        if (endOfLine === -1) endOfLine = textCount;
+
+        let lineCount = endOfLine - startOfLine;
+        if (lineCount > longestLineCount) longestLineCount = lineCount;
+
+        countOfLine += 1;
+        startOfLine = endOfLine + 1;
+    }
+
+    context.countOfLine      = countOfLine;
+    context.longestLineCount = longestLineCount;
 }
 
 
