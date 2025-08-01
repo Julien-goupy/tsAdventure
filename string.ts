@@ -72,20 +72,58 @@ export function string_count(haystack: string, needle: string, startOfSearch: nu
 
 export const UTF32_NEW_LINE = 10;
 
+export interface StringUtf32
+{
+    data : Uint32Array;
+    count: number;
+}
+
 
 ////////////////////////////////////////////////////////////
-export function string_utf32_count(haystack: Uint32Array, needle: number, startOfSearch: number =0, endOfSearch: number =-1): number
+export function string_utf32_index_of(s: StringUtf32, utf32: number, start: number =-1): number
 {
-    startOfSearch += 1;
-    if (endOfSearch === -1) endOfSearch = haystack[0];
-    else                    endOfSearch +=1;
-    let occurenceCount = 0;
-    let i              = 0;
-    let haystackCount  = haystack[0];
+    let data  = s.data;
+    let count = s.count;
 
-    while (i < haystackCount)
+    if (start === -1)
+        start = 0;
+
+    let index = data.indexOf(utf32, start);
+    if (index === -1)  return -1;
+    if (index > count) return -1;
+    return index;
+}
+
+
+////////////////////////////////////////////////////////////
+export function string_utf32_last_index_of(s: StringUtf32, utf32: number, start: number =-1): number
+{
+    let data  = s.data;
+    let count = s.count;
+
+    if (start === -1)
+        start = count;
+
+    let index = data.lastIndexOf(utf32, start);
+    if (index === -1)  return -1;
+    if (index > count) return -1;
+    return index;
+}
+
+
+////////////////////////////////////////////////////////////
+export function string_utf32_count(haystack: StringUtf32, needle: number, startOfSearch: number =0, endOfSearch: number =-1): number
+{
+    let data           = haystack.data;
+    let count          = haystack.count;
+    let occurenceCount = 0;
+
+    if (endOfSearch === -1)
+        endOfSearch = count;
+
+    while (true)
     {
-        let indexOfNextOccurrence = haystack.indexOf(needle, startOfSearch);
+        let indexOfNextOccurrence = data.indexOf(needle, startOfSearch);
         if (indexOfNextOccurrence === -1)         break;
         if (indexOfNextOccurrence >= endOfSearch) break;
 

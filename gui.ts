@@ -3,7 +3,7 @@ import { _defaultFont, font_draw_ascii, MonoFont } from "./font";
 import {_nowUs, Platform, platform_get} from "./logic";
 import { draw_quad, Rect, rect_contain, scissor_pop, scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
 import { Rewinder, rewinder_add_mutation, rewinder_get, rewinder_pop_mutation, rewinder_redo_mutation, TextMutation } from "./rewind";
-import { char_is_identifier, char_is_space, string_count, string_utf32_count, UTF32_NEW_LINE } from "./string";
+import { char_is_identifier, char_is_space, string_count, string_utf32_count, string_utf32_index_of, string_utf32_last_index_of, StringUtf32, UTF32_NEW_LINE } from "./string";
 
 ////////////////////////////////////////////////////////////
 // MARK: SYSTEM
@@ -80,12 +80,7 @@ interface UiContext
     longestLineCount : number;
     cursorPosition   : number;
     selectionPosition: number;
-
-    // string for small buffer, buffer for big...
-    // To redo later with better context maybe ?
-    text       : string;
-    bufferCount: number;
-    buffer     : Uint32Array;
+    text             : StringUtf32;
 
     // Scroll
     offsetX    : number;
@@ -119,9 +114,7 @@ function get_context(): UiContext
     return {
         font             : _defaultFont,
         scale            : 1,
-        text             : null as unknown as string,
-        buffer           : null as unknown as Uint32Array,
-        bufferCount      :  0,
+        text             : null as unknown as StringUtf32,
         countOfLine      :  0,
         longestLineCount :  0,
         cursorPosition   : -1,
@@ -303,7 +296,8 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
          // Can only be used for read
         let font              = context.font;
-        let text              = context.buffer;
+        let text              = context.text;
+        let data              = text.data;
         let cursorPosition    = context.cursorPosition;
         let selectionPosition = context.selectionPosition;
         let scale             = context.scale;
@@ -324,7 +318,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             //     Add option to be set at the start or at the end
             if ((widget.capabilities & UiWidgetCapability.TEXT_KEEP_STATE_AFTER_DE_ACTIVATION) === 0)
             {
-                context.cursorPosition    = text[0];
+                context.cursorPosition    = text.count;
                 context.selectionPosition = -1;
             }
 
@@ -545,7 +539,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         }
                     }
 
-                    if (context.cursorPosition > context.buffer[0]) context.cursorPosition = context.buffer[0];
+                    if (context.cursorPosition > context.text.count) context.cursorPosition = context.text.count;
 
                     hasEventBeenProcessed = true;
                 }
@@ -571,7 +565,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         context.selectionPosition = -1;
                     }
 
-                    if (context.cursorPosition > context.buffer[0]) context.cursorPosition = context.buffer[0];
+                    if (context.cursorPosition > context.text.count) context.cursorPosition = context.text.count;
 
                     hasEventBeenProcessed = true;
                 }
@@ -604,7 +598,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         context.selectionPosition = -1;
                     }
 
-                    if (context.cursorPosition > context.buffer[0]) context.cursorPosition = context.buffer[0];
+                    if (context.cursorPosition > context.text.count) context.cursorPosition = context.text.count;
 
                     hasEventBeenProcessed = true;
                 }
@@ -632,7 +626,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         endOfDeletion   = Math.max(selectionPosition, cursorPosition);
                     }
 
-                    if (startOfDeletion >= 0 && startOfDeletion < text[0])
+                    if (startOfDeletion >= 0 && startOfDeletion < text.count)
                     {
                         // _text_push_mutation(context.rewinder, text, startOfDeletion, endOfDeletion, "");
                         _text_delete_insert_string(text, startOfDeletion, endOfDeletion, "");
@@ -667,7 +661,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                 else if (event.key === GameEventKey.SELECT_ALL)
                 {
-                    context.cursorPosition    = text[0];
+                    context.cursorPosition    = text.count;
                     context.selectionPosition = 0;
                 }
 
@@ -681,7 +675,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         [startOfCopy, endOfCopy] = _text_get_line_containing_cursor(text, context.cursorPosition);
                     }
 
-                    let textView = text.slice(1+startOfCopy, 1+endOfCopy);
+                    let textView = text.data.slice(1+startOfCopy, 1+endOfCopy);
                     let asString = String.fromCodePoint(...textView);
                     clipboard_push(asString);
                 }
@@ -696,7 +690,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                         [startOfCopy, endOfCopy] = _text_get_line_containing_cursor(text, context.cursorPosition);
                     }
 
-                    let textView = text.slice(1+startOfCopy, 1+endOfCopy);
+                    let textView = text.data.slice(1+startOfCopy, 1+endOfCopy);
                     let asString = String.fromCodePoint(...textView);
                     clipboard_push(asString);
 
@@ -768,15 +762,15 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                             while (startOfLine !== startOfLastLine)
                             {
-                                if(text[startOfLine+1] !== 32)
+                                if(data[startOfLine] !== 32)
                                 {
-                                    startOfLine   = buffer_index_of(text, UTF32_NEW_LINE, startOfLine) + 1;
+                                    startOfLine   = string_utf32_index_of(text, UTF32_NEW_LINE, startOfLine) + 1;
                                     isOnFirstLine = false;
                                     continue;
                                 }
 
                                 let countOfSpaceAtTheBeginingOfTheLine = 0;
-                                while (text[startOfLine + countOfSpaceAtTheBeginingOfTheLine+1] === 32)
+                                while (data[startOfLine + countOfSpaceAtTheBeginingOfTheLine] === 32)
                                     countOfSpaceAtTheBeginingOfTheLine += 1;
 
                                 if (countOfSpaceAtTheBeginingOfTheLine > 4) countOfSpaceAtTheBeginingOfTheLine = 4;
@@ -788,14 +782,14 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
                                 }
 
                                 _text_delete_insert_string(text, startOfLine, startOfLine + countOfSpaceAtTheBeginingOfTheLine, "");
-                                startOfLine = buffer_index_of(text, UTF32_NEW_LINE, startOfLine) + 1;
+                                startOfLine = string_utf32_index_of(text, UTF32_NEW_LINE, startOfLine) + 1;
                                 startOfLastLine     -= countOfSpaceAtTheBeginingOfTheLine;
                                 countOfSpaceDeleted += countOfSpaceAtTheBeginingOfTheLine;
                             }
 
                             {
                                 let countOfSpaceAtTheBeginingOfTheLine = 0;
-                                while (text[startOfLine + countOfSpaceAtTheBeginingOfTheLine+1] === 32)
+                                while (data[startOfLine + countOfSpaceAtTheBeginingOfTheLine] === 32)
                                     countOfSpaceAtTheBeginingOfTheLine += 1;
 
                                 if (countOfSpaceAtTheBeginingOfTheLine > 4) countOfSpaceAtTheBeginingOfTheLine = 4;
@@ -824,7 +818,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                             while (startOfLine !== startOfLastLine)
                             {
-                                let endOfLine = buffer_index_of(text, UTF32_NEW_LINE, startOfLine) + 1;
+                                let endOfLine = string_utf32_index_of(text, UTF32_NEW_LINE, startOfLine) + 1;
                                 if ((endOfLine - startOfLine) === 1)
                                 {
                                     startOfLine += 1;
@@ -906,7 +900,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
         {
             {
                 let buffer    = text;
-                let textCount = buffer[0];
+                let textCount = text.count;
 
                 // @CopyPasta
                 // :computeTextDimensions:
@@ -916,7 +910,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
                 while (startOfLine < textCount)
                 {
-                    let endOfLine = buffer.indexOf(UTF32_NEW_LINE, startOfLine);
+                    let endOfLine = string_utf32_index_of(text, UTF32_NEW_LINE, startOfLine);
                     if (endOfLine === -1) endOfLine = textCount;
 
                     let lineCount = endOfLine - startOfLine;
@@ -938,9 +932,9 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
             // console.log(offsetRectInChar);
 
-            let startOfCursorLine = _text_start_of_line_for(context.buffer, context.cursorPosition);
+            let startOfCursorLine = _text_start_of_line_for(text, context.cursorPosition);
             let cursorX           = context.cursorPosition - startOfCursorLine;
-            let cursorY           = string_utf32_count(context.buffer, UTF32_NEW_LINE, 0, context.cursorPosition);
+            let cursorY           = string_utf32_count(text, UTF32_NEW_LINE, 0, context.cursorPosition);
 
             // console.log(cursorX, cursorY);
 
@@ -1025,10 +1019,13 @@ export function widget_context_set_text(context: UiContext, s: string)
     let buffer = new Uint32Array(bufferCapacity);
 
     for (let i=0; i < textCount ;i+=1)
-        buffer[i+1] = s.charCodeAt(i);
+        buffer[i] = s.charCodeAt(i);
 
-    buffer[0]      = textCount;
-    context.buffer = buffer;
+    context.text =
+    {
+        data : buffer,
+        count: textCount
+    };
 
     {
         // @CopyPasta
@@ -1130,10 +1127,6 @@ export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidg
             _contexts.set(id, context);
             hasBeenCreatedThisFrame = true;
         }
-        else
-        {
-            widget.text = context.text;
-        }
     }
 
     if (widget.id === _activeWidgetId)  widget.state |= UiWidgetState.GRABBED;
@@ -1167,34 +1160,11 @@ export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidg
 ////////////////////////////////////////////////////////////
 // MARK: TEXT
 ////////////////////////////////////////////////////////////
-function buffer_index_of(buffer: Uint32Array, utf32: number, start: number =-1): number
+function _find_cursor_position(s: StringUtf32, font: MonoFont, scale: number, x: number, y: number): number
 {
-    if (start === -1) start = 1;
-    else              start += 1;
+    let data  = s.data;
+    let count = s.count;
 
-    let index = buffer.indexOf(utf32, start);
-    if (index === -1)      return -1;
-    if (index > buffer[0]) return -1;
-    return index - 1;
-}
-
-
-////////////////////////////////////////////////////////////
-function buffer_last_index_of(buffer: Uint32Array, utf32: number, start: number =-1): number
-{
-    if (start === -1) start = 1;
-    else              start += 1;
-
-    let index = buffer.lastIndexOf(utf32, start);
-    if (index === -1)      return -1;
-    if (index > buffer[0]) return -1;
-    return index - 1;
-}
-
-
-////////////////////////////////////////////////////////////
-function _find_cursor_position(s: Uint32Array, font: MonoFont, scale: number, x: number, y: number): number
-{
     let cursorPosition = -1;
     let glyphWidth     = font.width  * scale;
     let lineHeight     = font.height * scale;
@@ -1206,12 +1176,12 @@ function _find_cursor_position(s: Uint32Array, font: MonoFont, scale: number, x:
 
     while (endOfLine !== -1)
     {
-        endOfLine = buffer_index_of(s, UTF32_NEW_LINE, startOfLine);
+        endOfLine = string_utf32_index_of(s, UTF32_NEW_LINE, startOfLine);
 
         if (lineNumber === cursorY)
         {
             if (endOfLine === -1)
-                endOfLine = s[0];
+                endOfLine = count;
 
             let lineCount    = endOfLine - startOfLine;
             let cursorOffset = cursorX;
@@ -1227,38 +1197,42 @@ function _find_cursor_position(s: Uint32Array, font: MonoFont, scale: number, x:
 
     if (cursorPosition === -1)
     {
-            if (y > 0) cursorPosition = s[0];
-            else       cursorPosition = 0;
+        if (y > 0) cursorPosition = count;
+        else       cursorPosition = 0;
     }
+
     return cursorPosition;
 }
 
 
 ////////////////////////////////////////////////////////////
-function _text_delete_insert(s: Uint32Array, startOfDeletion: number, endOfDeletion: number, insertion: Uint32Array)
+function _text_delete_insert(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: StringUtf32)
 {
-    s.copyWithin(startOfDeletion + insertion[0] + 1, endOfDeletion + 1);
-    s.set(insertion, startOfDeletion + 1);
-    s[0] += insertion[0] - (endOfDeletion - startOfDeletion);
+    s.data.copyWithin(startOfDeletion + insertion.count, endOfDeletion);
+    s.data.set(insertion.data, startOfDeletion);
+    s.count += insertion.count - (endOfDeletion - startOfDeletion);
 }
 
 
 ////////////////////////////////////////////////////////////
-function _text_delete_insert_one(s: Uint32Array, startOfDeletion: number, endOfDeletion: number, insertion: number)
+function _text_delete_insert_one(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: number)
 {
-    s.copyWithin(startOfDeletion + 1 + 1, endOfDeletion + 1);
-    s[startOfDeletion + 1] = insertion;
-    s[0] += 1 - (endOfDeletion - startOfDeletion);
+    s.data.copyWithin(startOfDeletion + 1, endOfDeletion);
+    s.data[startOfDeletion] = insertion;
+    s.count += 1 - (endOfDeletion - startOfDeletion);
 }
 
 
 ////////////////////////////////////////////////////////////
-function _text_delete_insert_string(s: Uint32Array, startOfDeletion: number, endOfDeletion: number, insertion: string)
+function _text_delete_insert_string(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: string)
 {
-    s.copyWithin(startOfDeletion + insertion.length + 1, endOfDeletion + 1);
-    for (let i=0; i < insertion.length ;i+=1)
-        s[1+startOfDeletion+i] = insertion.charCodeAt(i);
-    s[0] += insertion.length - (endOfDeletion - startOfDeletion);
+    let data            = s.data;
+    let insertionLength = insertion.length;
+
+    data.copyWithin(startOfDeletion + insertionLength, endOfDeletion);
+    for (let i=0; i < insertionLength ;i+=1)
+        data[startOfDeletion+i] = insertion.charCodeAt(i);
+    s.count += insertionLength - (endOfDeletion - startOfDeletion);
 }
 
 
@@ -1280,30 +1254,30 @@ function _text_push_mutation(rewinder: Rewinder, s: string, startOfDeletion: num
 
 
 ////////////////////////////////////////////////////////////
-function _text_start_of_line_for(s: Uint32Array, cursorPosition: number): number
+function _text_start_of_line_for(s: StringUtf32, cursorPosition: number): number
 {
-    let startOfLine = buffer_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
+    let startOfLine = string_utf32_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
     if (cursorPosition === 0) startOfLine = 0;
     return startOfLine;
 }
 
 
 ////////////////////////////////////////////////////////////
-function _text_get_line_containing_cursor(s: Uint32Array, cursorPosition: number): [number, number]
+function _text_get_line_containing_cursor(s: StringUtf32, cursorPosition: number): [number, number]
 {
-    let startOfLine = buffer_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
-    if (cursorPosition === 0) startOfLine = 0;
-    let endOfLine   = buffer_index_of(s, UTF32_NEW_LINE, cursorPosition);
-    if (endOfLine === -1) endOfLine = s[0];
+    let startOfLine = string_utf32_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
+    let endOfLine   = string_utf32_index_of(s, UTF32_NEW_LINE, cursorPosition);
+    if (cursorPosition ===  0) startOfLine = 0;
+    if (endOfLine      === -1) endOfLine   = s.count;
     return [startOfLine, endOfLine];
 }
 
 
 ////////////////////////////////////////////////////////////
-function _text_get_cursor_or_end_of_line(s: Uint32Array, startOfLine: number, offset: number): number
+function _text_get_cursor_or_end_of_line(s: StringUtf32, startOfLine: number, offset: number): number
 {
-    let endOfLine = buffer_index_of(s, UTF32_NEW_LINE, startOfLine);
-    if (endOfLine === -1) endOfLine = s[0];
+    let endOfLine = string_utf32_index_of(s, UTF32_NEW_LINE, startOfLine);
+    if (endOfLine === -1) endOfLine = s.count;
     let lineCount = endOfLine - startOfLine;
     if (offset > lineCount) offset = lineCount;
     return startOfLine + offset;
@@ -1311,12 +1285,14 @@ function _text_get_cursor_or_end_of_line(s: Uint32Array, startOfLine: number, of
 
 
 ////////////////////////////////////////////////////////////
-function _text_get_previous_word(s: Uint32Array, cursor: number): number
+function _text_get_previous_word(s: StringUtf32, cursor: number): number
 {
-    while (cursor > 0 && char_is_identifier(s[cursor-1+1]) == false)
+    let data = s.data;
+
+    while (cursor > 0 && char_is_identifier(data[cursor-1]) == false)
         cursor -= 1;
 
-    while (cursor > 0 && char_is_identifier(s[cursor-1+1]))
+    while (cursor > 0 && char_is_identifier(data[cursor-1]))
         cursor -= 1;
 
     return cursor;
@@ -1324,17 +1300,18 @@ function _text_get_previous_word(s: Uint32Array, cursor: number): number
 
 
 ////////////////////////////////////////////////////////////
-function _text_get_next_word(s: Uint32Array, cursor: number): number
+function _text_get_next_word(s: StringUtf32, cursor: number): number
 {
-    let count = s[0];
+    let data  = s.data;
+    let count = s.count;
 
-    while (cursor < count && char_is_identifier(s[cursor+1]) == false)
+    while (cursor < count && char_is_identifier(data[cursor]) == false)
         cursor += 1;
 
-    while (cursor < count && char_is_identifier(s[cursor+1]))
+    while (cursor < count && char_is_identifier(data[cursor]))
         cursor += 1;
 
-    while (cursor < count && char_is_identifier(s[cursor+1]) == false)
+    while (cursor < count && char_is_identifier(data[cursor]) == false)
         cursor += 1;
 
     return cursor;
@@ -1358,8 +1335,9 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
     const CURSOR_COLOR     = to_color(1, 0, 0, 1);
 
     let context                 = widget_context_of(widget);
-    let text                    = context.buffer;
-    let count                   = text[0];
+    let text                    = context.text;
+    let data                    = text.data;
+    let count                   = text.count;
     let offsetX                 = context.offsetX;
     let offsetY                 = context.offsetY;
     let rect                    = widget.rect;
@@ -1396,10 +1374,8 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
     scissor_push(rect);
 
     let startOfLine = 0;
-    let endOfLine   = buffer_index_of(text, UTF32_NEW_LINE);
+    let endOfLine   = string_utf32_index_of(text, UTF32_NEW_LINE);
     if (endOfLine === -1) endOfLine = count;
-
-    // if (count === 0) count = 1;
 
     while (startOfLine < count)
     {
@@ -1440,7 +1416,7 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
         x = startingX;
 
         startOfLine = endOfLine + 1;
-        endOfLine   = buffer_index_of(text, UTF32_NEW_LINE, startOfLine);
+        endOfLine   = string_utf32_index_of(text, UTF32_NEW_LINE, startOfLine);
         if (endOfLine === -1) endOfLine = count;
     }
 
@@ -1455,23 +1431,20 @@ export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOpti
 
     x = startingX;
     y = rect.y + offsetY;
-    startOfLine = 0;
-    endOfLine   = buffer_index_of(text, UTF32_NEW_LINE);
-    if (endOfLine === -1) endOfLine = count;
 
-    while (startOfLine < count)
+    for (let i=0; i < count ;i+=1)
     {
-        for (let j = startOfLine; j < endOfLine ;j+=1)
+        let unicode = data[i];
+        if (unicode === UTF32_NEW_LINE)
         {
-            font_draw_ascii(x, y, widget.z + 2, font, scale, text[j+1], TEXT_COLOR);
+            y += lineHeight;
+            x = startingX;
+        }
+        else
+        {
+            font_draw_ascii(x, y, widget.z + 2, font, scale, unicode, TEXT_COLOR);
             x += glyphWidth;
         }
-        y += lineHeight;
-        x = startingX;
-
-        startOfLine = endOfLine + 1;
-        endOfLine   = buffer_index_of(text, UTF32_NEW_LINE, startOfLine);
-        if (endOfLine === -1) endOfLine = count;
     }
 
     scissor_pop();
