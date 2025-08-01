@@ -3,29 +3,31 @@ import { _defaultFont, font_draw_ascii, MonoFont } from "./font";
 import {_nowUs, Platform, platform_get} from "./logic";
 import { draw_quad, Rect, rect_contain, scissor_pop, scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
 import { Rewinder, rewinder_add_mutation, rewinder_get, rewinder_pop_mutation, rewinder_redo_mutation, TextMutation } from "./rewind";
-import { char_is_identifier, char_is_space, string_count, string_utf32_count, string_utf32_index_of, string_utf32_last_index_of, StringUtf32, UTF32_NEW_LINE } from "./string";
+import { char_is_identifier, string_utf32_count, string_utf32_index_of, string_utf32_last_index_of, StringUtf32, UTF32_NEW_LINE } from "./string";
 
 ////////////////////////////////////////////////////////////
 // MARK: SYSTEM
 ////////////////////////////////////////////////////////////
 export const enum UiWidgetCapability
 {
-    NONE      = 0,
-    HOVERABLE = 1 << 0,
-    GRABBABLE = 1 << 1,
-    CLICKABLE = 1 << 2,
-    ACTIVABLE = 1 << 3,
+    NONE             = 0,
+    HOVERABLE        = 1 << 0,
+    GRABBABLE        = 1 << 1,
+    CLICKABLE        = 1 << 2,
+    DOUBLE_CLICKABLE = 1 << 3,
+    TRIPLE_CLICKABLE = 1 << 4,
+    ACTIVABLE        = 1 << 5,
 
-    TEXT_SELECTABLE = 1 << 4,
-    TEXT_UPDATE     = 1 << 5,
+    TEXT_SELECTABLE = 1 << 6,
+    TEXT_UPDATE     = 1 << 7,
     TEXT            = TEXT_SELECTABLE | TEXT_UPDATE,
 
-    SCROLLABLE = 1 << 6,
+    SCROLLABLE = 1 << 8,
 
     BUTTON_CAPABILITY = HOVERABLE | CLICKABLE,
     TEXT_CAPABILITY   = HOVERABLE | GRABBABLE | CLICKABLE | ACTIVABLE | TEXT_SELECTABLE | TEXT_UPDATE | SCROLLABLE,
 
-    TEXT_KEEP_STATE_AFTER_DE_ACTIVATION = 1 << 6,
+    TEXT_KEEP_STATE_AFTER_DE_ACTIVATION = 1 << 9,
 }
 
 
@@ -238,15 +240,11 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
                 }
             }
 
-            if (event.key === GameEventKey.MOUSSE_SCROLL_UP || event.key === GameEventKey.MOUSSE_SCROLL_DOWN)
+            if (event.key === GameEventKey.MOUSSE_SCROLL                    &&
+                _hoveredWidgetId !== -1                                     &&
+                _hoveredWidget.capabilities & UiWidgetCapability.SCROLLABLE  )
             {
-                if (_hoveredWidgetId !== -1)
-                {
-                    if (_hoveredWidget.capabilities & UiWidgetCapability.SCROLLABLE)
-                    {
-                        hasEventBeenProcessed = _widget_proc(_hoveredWidget, UiWidgetInternalEvent.SCROLL, event);
-                    }
-                }
+                hasEventBeenProcessed = _widget_proc(_hoveredWidget, UiWidgetInternalEvent.SCROLL, event);
             }
 
             if (event_is_keyboard(event) &&
@@ -427,25 +425,27 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             else
             {
                 context.isScrolling = true;
-                // @ts-ignore
-                let scrollY = event.data as number;
-                // @ts-ignore
-                if (event.key === GameEventKey.MOUSSE_SCROLL_UP)
-                {
-                    // context.offsetY += charHeight;
-                    context.offsetY -= scrollY;
-                    if (context.offsetY > 0) context.offsetY = 0;
-                }
-                // @ts-ignore
-                else if (event.key === GameEventKey.MOUSSE_SCROLL_DOWN)
-                {
-                    let maxHeight = context.countOfLine * charHeight - rect.height;
-                    if (maxHeight < 0) maxHeight = 0;
 
-                    // context.offsetY -= charHeight;
-                    context.offsetY -= scrollY;
-                    if (context.offsetY < -maxHeight) context.offsetY = -maxHeight;
-                }
+                // @ts-ignore
+                let scrollX = event.data.x as number;
+
+                context.offsetX -= scrollX;
+                if (context.offsetX > 0) context.offsetX = 0;
+
+                let maxWidth = context.longestLineCount * charWidth - rect.width;
+                if (maxWidth < 0) maxWidth = 0;
+                if (context.offsetX < -maxWidth) context.offsetX = -maxWidth;
+
+
+                // @ts-ignore
+                let scrollY = event.data.y as number;
+
+                context.offsetY -= scrollY;
+                if (context.offsetY > 0) context.offsetY = 0;
+
+                let maxHeight = context.countOfLine * charHeight - rect.height;
+                if (maxHeight < 0) maxHeight = 0;
+                if (context.offsetY < -maxHeight) context.offsetY = -maxHeight;
             }
 
             hasEventBeenProcessed = true;

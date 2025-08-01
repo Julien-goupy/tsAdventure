@@ -115,14 +115,13 @@ export const enum GameEventKey
 
     END_OF_KEYBOARD = 320,
 
-    MOUSSE_LEFT        = 320,
-    MOUSSE_MIDDLE      = 321, // scroll click
-    MOUSSE_RIGHT       = 322,
-    MOUSSE_4           = 323,
-    MOUSSE_5           = 324,
-    MOUSSE_6           = 325,
-    MOUSSE_SCROLL_UP   = 326,
-    MOUSSE_SCROLL_DOWN = 327,
+    MOUSSE_LEFT   = 320,
+    MOUSSE_MIDDLE = 321, // scroll click
+    MOUSSE_RIGHT  = 322,
+    MOUSSE_4      = 323,
+    MOUSSE_5      = 324,
+    MOUSSE_6      = 325,
+    MOUSSE_SCROLL = 326,
 
     END_OF_MOUSE = 380,
 }
@@ -215,15 +214,12 @@ export async function event_init()
     {
         browserEvent.preventDefault();
 
-        let key: GameEventKey = GameEventKey.MOUSSE_SCROLL_UP;
-        if (browserEvent.deltaY > 0) key = GameEventKey.MOUSSE_SCROLL_DOWN;
-
         let event: GameEvent = {
                                     type     : GameEventType.KEY,
-                                    key      : key,
+                                    key      : GameEventKey.MOUSSE_SCROLL,
                                     isPressed: true,
                                     modifier : _modifier,
-                                    data     : browserEvent.deltaY // on macOS at least
+                                    data     : {x: browserEvent.deltaX, y: browserEvent.deltaY} // on macOS at least
                                };
         _events.push(event);
     }
