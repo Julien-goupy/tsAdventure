@@ -1,9 +1,10 @@
 // import {console_toggle} from "../console";
 import {GameEvent,GameEventKey,GameEventType} from "../event";
 import {_defaultFont,font_get_line_height,font_get_text_dimension} from "../font";
-import {gui_rect,UiWidgetState,UiWidgetCapability,widget_id,widget_context_of,gui_draw_text_editor,widget_context_set_text,widget_component_id,widget_activate, gui_init} from "../gui";
+import {gui_rect,UiWidgetCapability,widget_id,gui_draw_text_editor,widget_component_id,widget_activate,gui_init,ui_button_logic,UiWidgetStateFlag,ui_text_editor} from "../gui";
 import {logic_set_controler,LogicControler} from "../logic";
 import {cursor_set,draw_quad,draw_rect,draw_text_in_rect,MouseCursor,Rect,rect_center,rect_cut_left,rect_cut_right,rect_cut_top,rect_shrink,TextDrawOption,to_color,to_rect} from "../renderer";
+import {string_to_utf32} from "../string";
 
 
 
@@ -405,18 +406,36 @@ function simulate(elapsedTime: number, frameId: number)
 
 }
 
+let SS = string_to_utf32(S);
+
 
 ////////////////////////////////////////////////////////////
 function draw(windowRect: Rect, frameId: number)
 {
 
-    if (false)
+    if (true)
     {
-        let projectSelectionRect = to_rect(0, 0, Math.round(windowRect.width*0.5), Math.round(windowRect.height*0.6));
-        projectSelectionRect = rect_center(windowRect, projectSelectionRect);
+        {
+            let r     = to_rect(0, 0, 200, 200);
+            let id    = widget_id(__LINE__);
+            let state = ui_button_logic(id, r, 1);
 
-        draw_text_in_rect(projectSelectionRect, 2, "Select a project", 4);
-        draw_rect(projectSelectionRect, 3, to_color(1, 0, 0, 1));
+            let color = to_color(1, 0, 0, 1);
+            if (state.flag & UiWidgetStateFlag.HOVERED)            color = to_color(0, 1, 0, 1);
+            if (state.flag & UiWidgetStateFlag.INTERACTING)        color = to_color(0, 0, 1, 1);
+            if (state.flag & UiWidgetStateFlag.LEFT_MOUSE_CLICKED) console.log("clicked");
+            draw_quad(r, 1, color);
+        }
+
+        {
+            let r     = to_rect(200, 0, windowRect.width - 200, windowRect.height);
+            let id    = widget_id(__LINE__);
+            SS        = ui_text_editor(id, r, 1, SS);
+
+        }
+
+
+
     }
     else
     {

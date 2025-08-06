@@ -54,6 +54,23 @@ export function string_count(haystack: string, needle: string, startOfSearch: nu
 }
 
 
+////////////////////////////////////////////////////////////
+export function string_to_utf32(s: string, granularity: number =128*1024): StringUtf32
+{
+    let textCount      = s.length;
+    let bufferCapacity = textCount;
+    if (bufferCapacity < granularity) bufferCapacity = granularity;
+    else                              bufferCapacity = Math.ceil(textCount / (granularity)) * granularity;
+    let buffer = new Uint32Array(bufferCapacity);
+
+    for (let i=0; i < textCount ;i+=1)
+        buffer[i] = s.charCodeAt(i);
+
+    return {
+             data : buffer,
+             count: textCount,
+           };
+}
 
 
 

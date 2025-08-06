@@ -3,60 +3,70 @@ import { _defaultFont, font_draw_ascii, MonoFont } from "./font";
 import {_nowUs, Platform, platform_get} from "./logic";
 import { draw_quad, Rect, rect_contain, scissor_pop, scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
 import { Rewinder, rewinder_add_mutation, rewinder_get, rewinder_pop_mutation, rewinder_redo_mutation, TextMutation } from "./rewind";
-import { char_is_identifier, string_utf32_count, string_utf32_index_of, string_utf32_last_index_of, StringUtf32, UTF32_NEW_LINE } from "./string";
+import { char_is_identifier, string_to_utf32, string_utf32_count, string_utf32_index_of, string_utf32_last_index_of, StringUtf32, UTF32_NEW_LINE } from "./string";
+
 
 ////////////////////////////////////////////////////////////
 // MARK: SYSTEM
 ////////////////////////////////////////////////////////////
 export const enum UiWidgetCapability
 {
-    NONE             = 0,
-    HOVERABLE        = 1 << 0,
-    GRABBABLE        = 1 << 1,
-    CLICKABLE        = 1 << 2,
-    DOUBLE_CLICKABLE = 1 << 3,
-    TRIPLE_CLICKABLE = 1 << 4,
-    ACTIVABLE        = 1 << 5,
+    NONE         = 0,
+    HOVERABLE    = 1 << 0,
+    ACTIVABLE    = 1 << 1,
+    LEFT_CLICK   = 1 << 2,
+    MIDDLE_CLICK = 1 << 3,
+    RIGHT_CLICK  = 1 << 4,
+    KEYBOARD     = 1 << 5,
+    SCROLLABLE_X = 1 << 6,
+    SCROLLABLE_Y = 1 << 7,
+    SCROLLABLE   = SCROLLABLE_X | SCROLLABLE_Y,
 
-    TEXT_SELECTABLE = 1 << 6,
-    TEXT_UPDATE     = 1 << 7,
-    TEXT            = TEXT_SELECTABLE | TEXT_UPDATE,
-
-    SCROLLABLE = 1 << 8,
-
-    BUTTON_CAPABILITY = HOVERABLE | CLICKABLE,
-    TEXT_CAPABILITY   = HOVERABLE | GRABBABLE | CLICKABLE | ACTIVABLE | TEXT_SELECTABLE | TEXT_UPDATE | SCROLLABLE,
-
-    TEXT_KEEP_STATE_AFTER_DE_ACTIVATION = 1 << 9,
+    CLICKED_ON_PRESSED = 1 << 8, // Click is triggered when button is pressed, not released
 }
 
 
-
-
-
-export const enum UiWidgetState
+export const enum UiWidgetStateFlag
 {
-    EMPTY                  = 0,
-    CREATED_THIS_FRAME     = 1 << 0,
-    ACTIVATED_THIS_FRAME   = 1 << 1,
-    DEACTIVATED_THIS_FRAME = 1 << 2,
-    HOVERED                = 1 << 3,
-    ACTIVE                 = 1 << 4,
-    GRABBED                = 1 << 5,
-    CLICKED                = 1 << 6,
+    EMPTY = 0,
+
+    ACTIVE                  = 1 << 0,
+    START_ACTIVE_THIS_FRAME = 1 << 1,
+    STOP_ACTIVE_THIS_FRAME  = 1 << 2,
+
+    HOVERED                  = 1 << 3,
+    START_HOVERED_THIS_FRAME = 1 << 4,
+    STOP_HOVERED_THIS_FRAME  = 1 << 5,
+
+    LEFT_MOUSE_PRESSED   = 1 << 6,
+    MIDDLE_MOUSE_PRESSED = 1 << 7,
+    RIGHT_MOUSE_PRESSED  = 1 << 8,
+
+    LEFT_MOUSE_CLICKED   = 1 << 9,
+    MIDDLE_MOUSE_CLICKED = 1 << 10,
+    RIGHT_MOUSE_CLICKED  = 1 << 11,
+
+    LEFT_MOUSE_RELEASED   = 1 << 12,
+    MIDDLE_MOUSE_RELEASED = 1 << 13,
+    RIGHT_MOUSE_RELEASED  = 1 << 14,
+
+    INTERACTING                  = 1 << 15,
+    START_INTERACTING_THIS_FRAME = 1 << 16,
+    STOP_INTERACTING_THIS_FRAME  = 1 << 17,
+
+    KEYBOARD_KEY_PRESSED = 1 << 18,
 }
 
 
-const enum UiWidgetInternalEvent
+export interface UiWidgetState
 {
-    ACTIVATION    = 1,
-    DE_ACTIVATION = 2,
+    flag                   : UiWidgetStateFlag;
+    consecutiveClickCounter: number;
+    lastInteractionTimeUs  : number;
 
-    DELTA_MOUSE = 3,
-    SCROLL      = 4,
-    UN_GRABBED  = 5,
-    CLICKED     = 6,
-    TEXT        = 7,
+    id  : number;
+    rect: Rect;
+    z   : number;
 }
 
 
@@ -67,13 +77,628 @@ export interface UiWidget
     z   : number;
 
     capabilities: UiWidgetCapability;
-    state       : UiWidgetState;
-
-    text: string;
 }
 
 
-interface UiContext
+
+
+
+let _hoveredWidgetZ          : number   = -1;
+let _hoveredWidgetId         : number   = -1;
+let _hoveredWidget           : UiWidget = null as unknown as UiWidget;
+let _previousHoveredWidgetId: number   = -1;
+
+let _activeWidgetId        : number   = -1;
+let _previousActiveWidgetId: number   = -1;
+let _nextActiveWidgetId    : number   = -1;
+let _activeWidget          : UiWidget = null as unknown as UiWidget;
+
+let _interactingWidgetId        : number = -1;
+let _previousInteractingWidgetId: number = -1;
+
+let _lastInteractionTimeUs  : number       =  0;
+let _clickedMouseButton     : GameEventKey = GameEventKey.NONE;
+let _clickedMouseButtonPressed : boolean      = false;
+let _lastClickedTimeUs      : number       =  0;
+let _consecutiveClickCounter: number       =  0;
+
+
+
+let _currentFrameWidget     : UiWidget[]             = [];
+
+
+
+////////////////////////////////////////////////////////////
+export function gui_init()
+{
+    if (platform_get() & Platform.APPLE)
+        _textWordNavigation = GameEventModifier.OPTION;
+}
+
+
+////////////////////////////////////////////////////////////
+export function gui_process_event(events: GameEvent[]): GameEvent[]
+{
+    _clickedMouseButton          = GameEventKey.NONE;
+    _previousInteractingWidgetId = _interactingWidgetId;
+
+    _previousHoveredWidgetId = _hoveredWidgetId;
+    _hoveredWidgetZ          = -1;
+    _hoveredWidgetId         = -1;
+    _hoveredWidget           = null as unknown as UiWidget;
+
+    _activeWidget           = null as unknown as UiWidget;
+    _previousActiveWidgetId = _activeWidgetId;
+    _activeWidgetId         = _nextActiveWidgetId;
+
+    for (let it of _currentFrameWidget)
+    {
+        if (it.id === _activeWidgetId) _activeWidget = it;
+
+        if (rect_contain(it.rect, mouseX, mouseY)                                              &&
+            it.z > _hoveredWidgetZ                                                             &&
+            (it.capabilities & UiWidgetCapability.HOVERABLE) === UiWidgetCapability.HOVERABLE   )
+        {
+            _hoveredWidgetZ  = it.z;
+            _hoveredWidgetId = it.id;
+            _hoveredWidget   = it;
+        }
+    }
+
+    if (_activeWidget === null)
+        _activeWidgetId = -1;
+
+
+
+
+
+    let hoveredWidgetSupportLeftMouseClick   = (_hoveredWidgetId !== -1) && (_hoveredWidget.capabilities & UiWidgetCapability.LEFT_CLICK);
+    let hoveredWidgetSupportMiddleMouseClick = (_hoveredWidgetId !== -1) && (_hoveredWidget.capabilities & UiWidgetCapability.MIDDLE_CLICK);
+    let hoveredWidgetSupportRightMouseClick  = (_hoveredWidgetId !== -1) && (_hoveredWidget.capabilities & UiWidgetCapability.RIGHT_CLICK);
+
+    for (let i=events.length-1; i >= 0 ;i-=1)
+    {
+        let event                 = events[i];
+        let hasEventBeenProcessed = false;
+
+        if (event.type === GameEventType.KEY)
+        {
+            if (event.key === GameEventKey.MOUSSE_LEFT)
+            {
+                if (event.isPressed)
+                {
+                    _clickedMouseButtonPressed = true;
+                    _clickedMouseButton     = GameEventKey.MOUSSE_LEFT;
+
+                    if (_activeWidgetId !== -1 && _hoveredWidgetId !== _activeWidgetId)
+                    {
+                        _nextActiveWidgetId  = -1;
+                        _interactingWidgetId = -1;
+                    }
+
+                    if (hoveredWidgetSupportLeftMouseClick)
+                    {
+                        _nextActiveWidgetId    = _hoveredWidgetId;
+                        _interactingWidgetId   = _hoveredWidgetId;
+                        _lastInteractionTimeUs = _nowUs;
+                        hasEventBeenProcessed  = true;
+                    }
+                }
+                else
+                {
+                    _clickedMouseButtonPressed = false;
+                    _clickedMouseButton        = GameEventKey.MOUSSE_LEFT;
+                    _interactingWidgetId       = -1;
+
+                    if (_interactingWidgetId !== -1)
+                        hasEventBeenProcessed = true;
+                }
+            }
+
+            // if (event.key === GameEventKey.MOUSSE_SCROLL                    &&
+            //     _hoveredWidgetId !== -1                                     &&
+            //     _hoveredWidget.capabilities & UiWidgetCapability.SCROLLABLE  )
+            // {
+            //     hasEventBeenProcessed = _widget_proc(_hoveredWidget, UiWidgetInternalEvent.SCROLL, event);
+            // }
+
+            // if (event_is_keyboard(event) &&
+            //     event.isPressed          &&
+            //     _activeWidgetId !== -1   &&
+            //     (_activeWidget.capabilities & UiWidgetCapability.TEXT)
+            // )
+            // {
+            //     _lastInteractionTimeUs = _nowUs;
+            //     hasEventBeenProcessed = _widget_proc(_activeWidget, UiWidgetInternalEvent.TEXT, event);
+            // }
+        }
+
+        // Bugged condition, shall be unstable remove
+        if (hasEventBeenProcessed)
+            events.length -= 1;
+    }
+
+    // if (_isGrabbing            &&
+    //     _activeWidget !== null &&
+    //     (_activeWidget.capabilities & UiWidgetCapability.GRABBABLE))
+    // {
+    //     _lastInteractionTimeUs = _nowUs;
+    //     _widget_proc(_activeWidget, UiWidgetInternalEvent.DELTA_MOUSE, null);
+    // }
+
+
+
+
+
+    _currentFrameWidget.length = 0;
+    return events;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////
+// MARK: GET RECT
+////////////////////////////////////////////////////////////
+export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidgetCapability): UiWidgetState
+{
+    let widget: UiWidget =
+    {
+        id  : id,
+        rect: {
+                  x: rect.x,
+                  y: rect.y,
+                  width : rect.width,
+                  height: rect.height,
+              },
+        z   : z,
+
+        capabilities: capabilities,
+    };
+
+    let state: UiWidgetState = {
+                                    flag                   : UiWidgetStateFlag.EMPTY,
+                                    consecutiveClickCounter: 0,
+                                    lastInteractionTimeUs  : _lastInteractionTimeUs,
+                                    id                     : id,
+                                    rect                   : widget.rect,
+                                    z                      : z
+                                };
+
+    if (id === _hoveredWidgetId)
+    {
+        state.flag |= UiWidgetStateFlag.HOVERED;
+        if (id !== _previousHoveredWidgetId)
+            state.flag |= UiWidgetStateFlag.START_HOVERED_THIS_FRAME;
+    }
+    else if (id === _previousHoveredWidgetId)
+        state.flag |= UiWidgetStateFlag.STOP_HOVERED_THIS_FRAME;
+
+    if (id === _nextActiveWidgetId)
+    {
+        state.flag |= UiWidgetStateFlag.ACTIVE;
+        if (id !== _activeWidgetId)
+            state.flag |= UiWidgetStateFlag.START_ACTIVE_THIS_FRAME | UiWidgetStateFlag.START_INTERACTING_THIS_FRAME;
+    }
+    else if (id === _activeWidgetId)
+        state.flag |= UiWidgetStateFlag.STOP_ACTIVE_THIS_FRAME | UiWidgetStateFlag.STOP_INTERACTING_THIS_FRAME;
+
+    if (id === _interactingWidgetId)
+        state.flag |= UiWidgetStateFlag.INTERACTING;
+
+    if (id === _interactingWidgetId)
+    {
+        if (_clickedMouseButtonPressed)
+        {
+            if (_clickedMouseButton === GameEventKey.MOUSSE_LEFT)
+                state.flag |= UiWidgetStateFlag.LEFT_MOUSE_PRESSED;
+            else if (_clickedMouseButton === GameEventKey.MOUSSE_MIDDLE)
+                state.flag |= UiWidgetStateFlag.MIDDLE_MOUSE_PRESSED;
+            else if (_clickedMouseButton === GameEventKey.MOUSSE_RIGHT)
+                state.flag |= UiWidgetStateFlag.RIGHT_MOUSE_PRESSED;
+
+            if (capabilities & UiWidgetCapability.CLICKED_ON_PRESSED)
+            {
+                if (_clickedMouseButton === GameEventKey.MOUSSE_LEFT)
+                    state.flag |= UiWidgetStateFlag.LEFT_MOUSE_CLICKED;
+                else if (_clickedMouseButton === GameEventKey.MOUSSE_MIDDLE)
+                    state.flag |= UiWidgetStateFlag.MIDDLE_MOUSE_CLICKED;
+                else if (_clickedMouseButton === GameEventKey.MOUSSE_RIGHT)
+                    state.flag |= UiWidgetStateFlag.RIGHT_MOUSE_CLICKED;
+            }
+        }
+    }
+    else if (id === _previousInteractingWidgetId && _clickedMouseButtonPressed === false)
+    {
+        if (_clickedMouseButton === GameEventKey.MOUSSE_LEFT)
+            state.flag |= UiWidgetStateFlag.LEFT_MOUSE_RELEASED;
+        else if (_clickedMouseButton === GameEventKey.MOUSSE_MIDDLE)
+            state.flag |= UiWidgetStateFlag.MIDDLE_MOUSE_RELEASED;
+        else if (_clickedMouseButton === GameEventKey.MOUSSE_RIGHT)
+            state.flag |= UiWidgetStateFlag.RIGHT_MOUSE_RELEASED;
+
+        if ((capabilities & UiWidgetCapability.CLICKED_ON_PRESSED) === 0 && id === _hoveredWidgetId)
+        {
+            if (_clickedMouseButton === GameEventKey.MOUSSE_LEFT)
+                state.flag |= UiWidgetStateFlag.LEFT_MOUSE_CLICKED;
+            else if (_clickedMouseButton === GameEventKey.MOUSSE_MIDDLE)
+                state.flag |= UiWidgetStateFlag.MIDDLE_MOUSE_CLICKED;
+            else if (_clickedMouseButton === GameEventKey.MOUSSE_RIGHT)
+                state.flag |= UiWidgetStateFlag.RIGHT_MOUSE_CLICKED;
+
+            if ((capabilities & UiWidgetCapability.ACTIVABLE) === 0)
+                state.flag |= UiWidgetStateFlag.STOP_INTERACTING_THIS_FRAME;
+        }
+    }
+
+    _currentFrameWidget.push(widget);
+    return state;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////
+// MARK: WIDGET
+////////////////////////////////////////////////////////////
+export function widget_id(lineNumber: number, i: number = 0): number
+{
+    let hash = 5381;
+    hash = ((hash << 5) + hash) + lineNumber;
+    hash = ((hash << 5) + hash) + i;
+    return hash >>> 0;
+}
+
+
+////////////////////////////////////////////////////////////
+export function widget_component_id(widgetId: number, i: number = 0): number
+{
+    widgetId = ((widgetId << 5) + widgetId) + i;
+    return widgetId >>> 0;
+}
+
+
+////////////////////////////////////////////////////////////
+export function widget_deactivate(widgetId: number)
+{
+    if (_activeWidgetId === widgetId)
+        _nextActiveWidgetId = -1;
+}
+
+
+////////////////////////////////////////////////////////////
+export function widget_activate(widget: UiWidget)
+{
+    _nextActiveWidgetId = widget.id;
+}
+
+
+////////////////////////////////////////////////////////////
+export function widget_state_flag_to_string(flag: UiWidgetStateFlag): string
+{
+    let flagsRepr: string[] = [];
+
+    if (flag === UiWidgetStateFlag.EMPTY)
+    {
+        flagsRepr.push("EMPTY")
+    }
+    else
+    {
+        if (flag & UiWidgetStateFlag.ACTIVE)                       flagsRepr.push("ACTIVE")
+        if (flag & UiWidgetStateFlag.START_ACTIVE_THIS_FRAME)      flagsRepr.push("START_ACTIVE_THIS_FRAME")
+        if (flag & UiWidgetStateFlag.STOP_ACTIVE_THIS_FRAME)       flagsRepr.push("STOP_ACTIVE_THIS_FRAME")
+        if (flag & UiWidgetStateFlag.HOVERED)                      flagsRepr.push("HOVERED")
+        if (flag & UiWidgetStateFlag.START_HOVERED_THIS_FRAME)     flagsRepr.push("START_HOVERED_THIS_FRAME")
+        if (flag & UiWidgetStateFlag.STOP_HOVERED_THIS_FRAME)      flagsRepr.push("STOP_HOVERED_THIS_FRAME")
+        if (flag & UiWidgetStateFlag.LEFT_MOUSE_PRESSED)           flagsRepr.push("LEFT_MOUSE_PRESSED")
+        if (flag & UiWidgetStateFlag.MIDDLE_MOUSE_PRESSED)         flagsRepr.push("MIDDLE_MOUSE_PRESSED")
+        if (flag & UiWidgetStateFlag.RIGHT_MOUSE_PRESSED)          flagsRepr.push("RIGHT_MOUSE_PRESSED")
+        if (flag & UiWidgetStateFlag.LEFT_MOUSE_CLICKED)           flagsRepr.push("LEFT_MOUSE_CLICKED")
+        if (flag & UiWidgetStateFlag.MIDDLE_MOUSE_CLICKED)         flagsRepr.push("MIDDLE_MOUSE_CLICKED")
+        if (flag & UiWidgetStateFlag.RIGHT_MOUSE_CLICKED)          flagsRepr.push("RIGHT_MOUSE_CLICKED")
+        if (flag & UiWidgetStateFlag.LEFT_MOUSE_RELEASED)          flagsRepr.push("LEFT_MOUSE_RELEASED")
+        if (flag & UiWidgetStateFlag.MIDDLE_MOUSE_RELEASED)        flagsRepr.push("MIDDLE_MOUSE_RELEASED")
+        if (flag & UiWidgetStateFlag.RIGHT_MOUSE_RELEASED)         flagsRepr.push("RIGHT_MOUSE_RELEASED")
+        if (flag & UiWidgetStateFlag.INTERACTING)                  flagsRepr.push("INTERACTING")
+        if (flag & UiWidgetStateFlag.START_INTERACTING_THIS_FRAME) flagsRepr.push("START_INTERACTING_THIS_FRAME")
+        if (flag & UiWidgetStateFlag.STOP_INTERACTING_THIS_FRAME)  flagsRepr.push("STOP_INTERACTING_THIS_FRAME")
+        if (flag & UiWidgetStateFlag.KEYBOARD_KEY_PRESSED)         flagsRepr.push("KEYBOARD_KEY_PRESSED")
+    }
+
+    return flagsRepr.join(" | ");
+}
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////
+// MARK: W/Button
+////////////////////////////////////////////////////////////
+export function ui_button_logic(id: number, rect: Rect, z: number): UiWidgetState
+{
+    let state = gui_rect(id, rect, z, UiWidgetCapability.HOVERABLE | UiWidgetCapability.LEFT_CLICK);
+    return state;
+}
+
+
+
+
+
+////////////////////////////////////////////////////////////
+// MARK: W/Text Editor
+////////////////////////////////////////////////////////////
+export function ui_text_editor(id: number, rect: Rect, z: number, s: StringUtf32): StringUtf32
+{
+    let context = _contexts.get(id);
+    if (context === undefined)
+    {
+        if (s === null)
+            s = string_to_utf32("", 128*1024);
+
+        context = {
+                        font             : _defaultFont,
+                        scale            : 1,
+                        text             : s,
+                        countOfLine      :  0,
+                        longestLineCount :  0,
+                        cursorPosition   : -1,
+                        selectionPosition: -1,
+                        offsetX          :  0,
+                        offsetY          :  0,
+                        isScrolling      : false,
+                  };
+
+        // @CopyPasta
+        // :computeTextDimensions:
+        {
+            let data  = s.data;
+            let count = s.count;
+
+            let startOfLine      = 0;
+            let countOfLine      = 0;
+            let longestLineCount = 0;
+
+            while (startOfLine < count)
+            {
+                let endOfLine = data.indexOf(UTF32_NEW_LINE, startOfLine);
+                if (endOfLine === -1) endOfLine = count;
+
+                let lineCount = endOfLine - startOfLine;
+                if (lineCount > longestLineCount) longestLineCount = lineCount;
+
+                countOfLine += 1;
+                startOfLine = endOfLine + 1;
+            }
+
+            context.countOfLine      = countOfLine;
+            context.longestLineCount = longestLineCount;
+        }
+
+        _contexts.set(id, context);
+    }
+
+    // Logic
+    {
+        let state = gui_rect(id, rect, z, UiWidgetCapability.HOVERABLE | UiWidgetCapability.LEFT_CLICK | UiWidgetCapability.ACTIVABLE);
+        // console.log(widget_state_flag_to_string(state.flag));
+        let font              = context.font;
+        let text              = context.text;
+        let data              = text.data;
+        let textCount         = text.count;
+        let cursorPosition    = context.cursorPosition;
+        let selectionPosition = context.selectionPosition;
+        let scale             = context.scale;
+        let charWidth         = font.width  * scale;
+        let charHeight        = font.height * scale;
+
+
+        if (state.flag & UiWidgetStateFlag.INTERACTING)
+        {
+            let localMouseX = mouseX - (rect.x + context.offsetX);
+            let localMouseY = mouseY - (rect.y + context.offsetY);
+
+            if (state.flag & UiWidgetStateFlag.START_INTERACTING_THIS_FRAME)
+            {
+                context.cursorPosition    = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
+                context.selectionPosition = -1;
+            }
+            else
+            {
+                context.selectionPosition = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
+            }
+        }
+
+    }
+
+
+
+
+
+    // Draw
+    {
+        const TEXT_COLOR       = to_color(0.8, 0.8, 0.8, 1);
+        const BACKGROUND_COLOR = to_color(0, 0, 0, 1);
+        const SELECTION_COLOR  = to_color(0, 0, 0.6, 1);
+        const CURSOR_COLOR     = to_color(1, 0, 0, 1);
+
+        let text                    = context.text;
+        let data                    = text.data;
+        let count                   = text.count;
+        let offsetX                 = context.offsetX;
+        let offsetY                 = context.offsetY;
+        let scale                   = context.scale;
+        let startingX               = rect.x + offsetX;
+        let x                       = startingX;
+        let y                       = rect.y + offsetY;
+        let font                    = _defaultFont;
+        let glyphWidth              = scale * font.width;
+        let lineHeight              = scale * font.height;
+        let accumulatedTextLength   = 0
+        let cursorPosition          = context.cursorPosition;
+        let selectionCursorPosition = context.selectionPosition;
+        let shouldShowCursor        = (Math.round((_nowUs - _lastInteractionTimeUs) / 500_000) & 1) === 0;
+        let totalHeight             = context.countOfLine * lineHeight;
+
+        let hasScrollBarX           = false;
+        let hasScrollBarY           = totalHeight > rect.height;
+        let sizeOfScrollCursorX     = 0;
+        let sizeOfScrollCursorY     = (rect.height / totalHeight) * rect.height;
+        let offsetOfScrollCursorX   = 0;
+        let offsetOfScrollCursorY   = (-offsetY) / totalHeight * rect.height;
+        let scrollBarThickness      = Math.round(lineHeight * 0.7);
+
+        let startOfSelection = -1;
+        let endOfSelection   = -1;
+        let isSelecting      = false;
+        if (selectionCursorPosition !== -1)
+        {
+            startOfSelection = Math.min(selectionCursorPosition, cursorPosition);
+            endOfSelection   = Math.max(selectionCursorPosition, cursorPosition);
+        }
+
+        scissor_push(rect);
+
+        let startOfLine = 0;
+        let endOfLine   = string_utf32_index_of(text, UTF32_NEW_LINE);
+        if (endOfLine === -1) endOfLine = count;
+
+        while (startOfLine < count)
+        {
+            let j = startOfLine;
+            for (; j < endOfLine ;j+=1)
+            {
+                if (accumulatedTextLength === startOfSelection) isSelecting = true;
+                if (accumulatedTextLength === endOfSelection)   isSelecting = false;
+
+                if (isSelecting)
+                    draw_quad(to_rect(x, y, glyphWidth, lineHeight), z + 1, SELECTION_COLOR);
+
+                if (shouldShowCursor && accumulatedTextLength === cursorPosition)
+                {
+                    let cursorX = x-1;
+                    if (cursorX < rect.x) cursorX = rect.x;
+                    let cursorRect = to_rect(cursorX, y, scale, lineHeight);
+                    draw_quad(cursorRect, z + 3, CURSOR_COLOR);
+                }
+
+                accumulatedTextLength += 1;
+                x += glyphWidth;
+            }
+
+            if (shouldShowCursor && accumulatedTextLength === cursorPosition)
+            {
+                let cursorX = x-1;
+                if (cursorX < rect.x) cursorX = rect.x;
+                let cursorRect = to_rect(cursorX, y, scale, lineHeight);
+                draw_quad(cursorRect, z + 2, CURSOR_COLOR);
+            }
+
+            if (accumulatedTextLength === startOfSelection) isSelecting = true;
+            if (accumulatedTextLength === endOfSelection)   isSelecting = false;
+
+            accumulatedTextLength += 1;
+            y += lineHeight;
+            x = startingX;
+
+            startOfLine = endOfLine + 1;
+            endOfLine   = string_utf32_index_of(text, UTF32_NEW_LINE, startOfLine);
+            if (endOfLine === -1) endOfLine = count;
+        }
+
+        if (shouldShowCursor && accumulatedTextLength === cursorPosition)
+        {
+            let cursorX = x-1;
+            if (cursorX < rect.x) cursorX = rect.x;
+            let cursorRect = to_rect(cursorX, y, scale, lineHeight);
+            draw_quad(cursorRect, z + 2, CURSOR_COLOR);
+        }
+
+
+        x = startingX;
+        y = rect.y + offsetY;
+
+        for (let i=0; i < count ;i+=1)
+        {
+            let unicode = data[i];
+            if (unicode === UTF32_NEW_LINE)
+            {
+                y += lineHeight;
+                x = startingX;
+            }
+            else
+            {
+                font_draw_ascii(x, y, z + 2, font, scale, unicode, TEXT_COLOR);
+                x += glyphWidth;
+            }
+        }
+
+        scissor_pop();
+
+        if (hasScrollBarY)
+        {
+            let backgroundScrollBarRect = to_rect(rect.x + rect.width - scrollBarThickness, rect.y                        , scrollBarThickness, rect.height);
+            let scrollBarCursorRect     = to_rect(rect.x + rect.width - scrollBarThickness, rect.y + offsetOfScrollCursorY, scrollBarThickness, sizeOfScrollCursorY);
+            draw_quad(backgroundScrollBarRect, z + 5, BACKGROUND_COLOR);
+            draw_quad(scrollBarCursorRect    , z + 6, TEXT_COLOR);
+        }
+    }
+
+    return context.text;
+}
+
+
+
+
+
+interface TextEditorContext
 {
     // Text
     font             : MonoFont;
@@ -88,191 +713,182 @@ interface UiContext
     offsetX    : number;
     offsetY    : number;
     isScrolling: boolean;
-
-    // temp
-    rewinder: Rewinder;
 }
-
-
-let _hoveredWidgetZ         : number                 = -1;
-let _hoveredWidgetId        : number                 = -1;
-let _hoveredWidget          : UiWidget               = null as unknown as UiWidget;
-let _isGrabbing             : boolean                = false;
-let _activeWidgetId         : number                 = -1;
-let _activeWidgetIdLastFrame: number                 = -1;
-let _activeWidget           : UiWidget               = null as unknown as UiWidget;
-let _currentFrameWidget     : UiWidget[]             = [];
-let _contexts               : Map<number, UiContext> = new Map();
-
-let _lastInteractionTimeUs: number = 0;
-let _clickedWidgetId      : number = -1;
-
-let _textWordNavigation   = GameEventModifier.CONTROL;
-// let _textLineNavigation   = GameEventModifier.CONTROL;
-
-////////////////////////////////////////////////////////////
-function get_context(): UiContext
-{
-    return {
-        font             : _defaultFont,
-        scale            : 1,
-        text             : null as unknown as StringUtf32,
-        countOfLine      :  0,
-        longestLineCount :  0,
-        cursorPosition   : -1,
-        selectionPosition: -1,
-        offsetX          :  0,
-        offsetY          :  0,
-        isScrolling      : false,
-        rewinder         : rewinder_get()
-    };
-}
-
-
-
-
-
-
-
-
-
-
+let _contexts : Map<number, TextEditorContext> = new Map();
+let _textWordNavigation = GameEventModifier.CONTROL;
 
 
 
 ////////////////////////////////////////////////////////////
-export function gui_init()
+function _find_cursor_position(s: StringUtf32, font: MonoFont, scale: number, x: number, y: number): number
 {
-    if (platform_get() & Platform.APPLE)
-        _textWordNavigation = GameEventModifier.OPTION;
-}
+    let data  = s.data;
+    let count = s.count;
 
+    let cursorPosition = -1;
+    let glyphWidth     = font.width  * scale;
+    let lineHeight     = font.height * scale;
+    let cursorX        = Math.round(x / glyphWidth);
+    let cursorY        = Math.floor(y / lineHeight);
+    let startOfLine    = 0;
+    let endOfLine      = 0;
+    let lineNumber     = 0;
 
-////////////////////////////////////////////////////////////
-export function gui_init_frame()
-{
-    _hoveredWidgetZ  = -1;
-    _hoveredWidgetId = -1;
-    _hoveredWidget   = null as unknown as UiWidget;
-    _clickedWidgetId = -1;
-
-    let activeWidget = null as unknown as UiWidget;
-
-    for (let it of _currentFrameWidget)
+    while (endOfLine !== -1)
     {
-        if (it.id === _activeWidgetId) activeWidget = it;
+        endOfLine = string_utf32_index_of(s, UTF32_NEW_LINE, startOfLine);
 
-        if (rect_contain(it.rect, mouseX, mouseY)                                              &&
-            it.z > _hoveredWidgetZ                                                             &&
-            (it.capabilities & UiWidgetCapability.HOVERABLE) === UiWidgetCapability.HOVERABLE   )
+        if (lineNumber === cursorY)
         {
-            _hoveredWidgetZ  = it.z;
-            _hoveredWidgetId = it.id;
-            _hoveredWidget   = it;
-        }
-    }
+            if (endOfLine === -1)
+                endOfLine = count;
 
-    if (activeWidget === null)
-    {
-        _activeWidget   = null as unknown as UiWidget;
-        _activeWidgetId = -1;
-    }
-}
+            let lineCount    = endOfLine - startOfLine;
+            let cursorOffset = cursorX;
+            if (cursorOffset > lineCount) cursorOffset = lineCount;
+            cursorPosition = startOfLine + cursorOffset;
 
-
-
-////////////////////////////////////////////////////////////
-export function gui_process_event(events: GameEvent[]): GameEvent[]
-{
-    for (let i=events.length-1; i >= 0 ;i-=1)
-    {
-        let event                 = events[i];
-        let hasEventBeenProcessed = false;
-
-        if (event.type === GameEventType.KEY)
-        {
-            if (event.key === GameEventKey.MOUSSE_LEFT)
-            {
-                if (event.isPressed)
-                {
-                    if (_hoveredWidgetId !== _activeWidgetId && _activeWidget !== null)
-                    {
-                        _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
-                        _activeWidget   = null as unknown as UiWidget;
-                        _activeWidgetId = -1;
-                    }
-
-                    if (_hoveredWidget !== null)
-                    {
-                        if (_hoveredWidgetId !== _activeWidgetId)
-                            _widget_proc(_hoveredWidget, UiWidgetInternalEvent.ACTIVATION, null);
-                        _widget_proc(_hoveredWidget, UiWidgetInternalEvent.CLICKED, event);
-                        _activeWidget          = _hoveredWidget;
-                        _activeWidgetId        = _hoveredWidgetId;
-                        _isGrabbing            = true;
-                        hasEventBeenProcessed  = true;
-                        _lastInteractionTimeUs = _nowUs;
-                    }
-                }
-                else
-                {
-                    _isGrabbing = false;
-
-                    if (_activeWidgetId !== -1 && (_activeWidget.capabilities & UiWidgetCapability.GRABBABLE))
-                    {
-                        _widget_proc(_activeWidget, UiWidgetInternalEvent.UN_GRABBED, null);
-                    }
-
-                    if (_activeWidgetId !== -1 && (_activeWidget.capabilities & UiWidgetCapability.CLICKABLE) === UiWidgetCapability.CLICKABLE)
-                    {
-                        if (_hoveredWidgetId === _activeWidgetId)
-                        {
-                            _clickedWidgetId = _hoveredWidgetId;
-                        }
-
-                        if ((_activeWidget.capabilities & UiWidgetCapability.ACTIVABLE) === 0)
-                        {
-                            _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
-                            _activeWidget   = null as unknown as UiWidget;
-                            _activeWidgetId = -1;
-                        }
-                    }
-                }
-            }
-
-            if (event.key === GameEventKey.MOUSSE_SCROLL                    &&
-                _hoveredWidgetId !== -1                                     &&
-                _hoveredWidget.capabilities & UiWidgetCapability.SCROLLABLE  )
-            {
-                hasEventBeenProcessed = _widget_proc(_hoveredWidget, UiWidgetInternalEvent.SCROLL, event);
-            }
-
-            if (event_is_keyboard(event) &&
-                event.isPressed          &&
-                _activeWidgetId !== -1   &&
-                (_activeWidget.capabilities & UiWidgetCapability.TEXT)
-            )
-            {
-                _lastInteractionTimeUs = _nowUs;
-                hasEventBeenProcessed = _widget_proc(_activeWidget, UiWidgetInternalEvent.TEXT, event);
-            }
+            break;
         }
 
-        if (hasEventBeenProcessed)
-            events.length -= 1;
+        startOfLine = endOfLine + 1;
+        lineNumber += 1;
     }
 
-    if (_isGrabbing            &&
-        _activeWidget !== null &&
-        (_activeWidget.capabilities & UiWidgetCapability.GRABBABLE))
+    if (cursorPosition === -1)
     {
-        _lastInteractionTimeUs = _nowUs;
-        _widget_proc(_activeWidget, UiWidgetInternalEvent.DELTA_MOUSE, null);
+        if (y > 0) cursorPosition = count;
+        else       cursorPosition = 0;
     }
 
-
-    return events;
+    return cursorPosition;
 }
+
+
+////////////////////////////////////////////////////////////
+function _text_delete_insert(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: StringUtf32)
+{
+    s.data.copyWithin(startOfDeletion + insertion.count, endOfDeletion);
+    s.data.set(insertion.data, startOfDeletion);
+    s.count += insertion.count - (endOfDeletion - startOfDeletion);
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_delete_insert_one(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: number)
+{
+    s.data.copyWithin(startOfDeletion + 1, endOfDeletion);
+    s.data[startOfDeletion] = insertion;
+    s.count += 1 - (endOfDeletion - startOfDeletion);
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_delete_insert_string(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: string)
+{
+    let data            = s.data;
+    let insertionLength = insertion.length;
+
+    data.copyWithin(startOfDeletion + insertionLength, endOfDeletion);
+    for (let i=0; i < insertionLength ;i+=1)
+        data[startOfDeletion+i] = insertion.charCodeAt(i);
+    s.count += insertionLength - (endOfDeletion - startOfDeletion);
+}
+
+
+
+
+
+
+////////////////////////////////////////////////////////////
+function _text_start_of_line_for(s: StringUtf32, cursorPosition: number): number
+{
+    let startOfLine = string_utf32_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
+    if (cursorPosition === 0) startOfLine = 0;
+    return startOfLine;
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_get_line_containing_cursor(s: StringUtf32, cursorPosition: number): [number, number]
+{
+    let startOfLine = string_utf32_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
+    let endOfLine   = string_utf32_index_of(s, UTF32_NEW_LINE, cursorPosition);
+    if (cursorPosition ===  0) startOfLine = 0;
+    if (endOfLine      === -1) endOfLine   = s.count;
+    return [startOfLine, endOfLine];
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_get_cursor_or_end_of_line(s: StringUtf32, startOfLine: number, offset: number): number
+{
+    let endOfLine = string_utf32_index_of(s, UTF32_NEW_LINE, startOfLine);
+    if (endOfLine === -1) endOfLine = s.count;
+    let lineCount = endOfLine - startOfLine;
+    if (offset > lineCount) offset = lineCount;
+    return startOfLine + offset;
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_get_previous_word(s: StringUtf32, cursor: number): number
+{
+    let data = s.data;
+
+    while (cursor > 0 && char_is_identifier(data[cursor-1]) == false)
+        cursor -= 1;
+
+    while (cursor > 0 && char_is_identifier(data[cursor-1]))
+        cursor -= 1;
+
+    return cursor;
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_get_next_word(s: StringUtf32, cursor: number): number
+{
+    let data  = s.data;
+    let count = s.count;
+
+    while (cursor < count && char_is_identifier(data[cursor]) == false)
+        cursor += 1;
+
+    while (cursor < count && char_is_identifier(data[cursor]))
+        cursor += 1;
+
+    while (cursor < count && char_is_identifier(data[cursor]) == false)
+        cursor += 1;
+
+    return cursor;
+}
+
+
+
+
+export const enum GuiTextEditorOption
+{
+    NONE             = 0,
+    SHOW_LINE_NUMBER = 1 << 0,
+}
+
+
+export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOption =GuiTextEditorOption.NONE)
+{
+
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -281,11 +897,10 @@ export function gui_process_event(events: GameEvent[]): GameEvent[]
 function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event: GameEvent | null): boolean
 {
     let hasEventBeenProcessed = false;
+    let context               = _contexts.get(widget.id);
 
     if (widget.capabilities & UiWidgetCapability.TEXT)
     {
-        let context = _contexts.get(widget.id);
-
         if (context === undefined)
         {
             console.error(`Text input id [${widget.id}] does not have a context`);
@@ -296,6 +911,7 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
         let font              = context.font;
         let text              = context.text;
         let data              = text.data;
+        let textCount         = text.count;
         let cursorPosition    = context.cursorPosition;
         let selectionPosition = context.selectionPosition;
         let scale             = context.scale;
@@ -325,7 +941,8 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
         else if (eventType === UiWidgetInternalEvent.CLICKED)
         {
-            console.assert(event !== null);
+            context.isScrolling   = false;
+            hasEventBeenProcessed = true;
 
             // console.log("Text CLICKED");
             let localMouseX = mouseX - (widget.rect.x + context.offsetX);
@@ -341,12 +958,34 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
             }
             else
             {
-                context.cursorPosition    = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
-                context.selectionPosition = context.cursorPosition;
+                // @ts-ignore
+                let consecutiveClickCounter = (event.data as number) % 5;
+                console.log("clicked", consecutiveClickCounter)
+
+                if (consecutiveClickCounter === 0)
+                {
+                    context.cursorPosition    = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
+                    context.selectionPosition = context.cursorPosition;
+                }
+                else if (consecutiveClickCounter === 1)
+                {
+
+                }
+                else if (consecutiveClickCounter === 2)
+                {
+                    let [startOfCursorLine, endOfCursorLine] = _text_get_line_containing_cursor(text, cursorPosition);
+                    context.cursorPosition    = startOfCursorLine;
+                    context.selectionPosition = endOfCursorLine;
+                    console.log("A", context.cursorPosition)
+                    console.log("V", context.selectionPosition)
+                }
+                else if (consecutiveClickCounter === 3)
+                {
+                    context.cursorPosition    = 0;
+                    context.selectionPosition = textCount;
+                }
             }
 
-            context.isScrolling   = false;
-            hasEventBeenProcessed = true;
         }
 
         else if (eventType === UiWidgetInternalEvent.DE_ACTIVATION)
@@ -943,517 +1582,15 @@ function _widget_proc(widget: UiWidget, eventType: UiWidgetInternalEvent, event:
 
             if ((cursorX + offsetRectInChar.x) >= offsetRectInChar.width) context.offsetX = (offsetRectInChar.width - cursorX) * charWidth;
             if ((cursorX + offsetRectInChar.x) < 0)                       context.offsetX = -cursorX * charWidth;
+
+
         }
     }
 
-
+    if (context !== undefined)
+    {
+        console.log("A2", context.cursorPosition, context.selectionPosition, eventType, event);
+    }
 
     return hasEventBeenProcessed;
-}
-
-
-////////////////////////////////////////////////////////////
-export function gui_prepare_new_frame()
-{
-    _activeWidgetIdLastFrame = _activeWidgetId;
-    _currentFrameWidget.length = 0;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-////////////////////////////////////////////////////////////
-// MARK: WIDGET ID
-////////////////////////////////////////////////////////////
-export function widget_id(lineNumber: number, i: number = 0): number
-{
-    let hash = 5381;
-    hash = ((hash << 5) + hash) + lineNumber;
-    hash = ((hash << 5) + hash) + i;
-    return hash >>> 0;
-}
-
-
-////////////////////////////////////////////////////////////
-export function widget_component_id(widgetId: number, i: number = 0): number
-{
-    widgetId = ((widgetId << 5) + widgetId) + i;
-    return widgetId >>> 0;
-}
-
-
-
-
-
-
-
-////////////////////////////////////////////////////////////
-// MARK: WIDGET HELPER
-////////////////////////////////////////////////////////////
-export function widget_context_of(widget: UiWidget): UiContext
-{
-    let context = _contexts.get(widget.id);
-    if (context === undefined) return get_context();
-    return context;
-}
-
-
-////////////////////////////////////////////////////////////
-export function widget_context_set_text(context: UiContext, s: string)
-{
-    // Allocate 512Kb per 512Kb. If seems a good compromise between memory and few realloc
-    // Allocate 512Kb of utf32 data as minimum.
-    let textCount      = s.length;
-    let bufferCapacity = textCount;
-    if (bufferCapacity < 128*1024) bufferCapacity = 128*1024;
-    else                           bufferCapacity = Math.ceil(s.length / (128*1024)) * 128*1024;
-    let buffer = new Uint32Array(bufferCapacity);
-
-    for (let i=0; i < textCount ;i+=1)
-        buffer[i] = s.charCodeAt(i);
-
-    context.text =
-    {
-        data : buffer,
-        count: textCount
-    };
-
-    {
-        // @CopyPasta
-        // :computeTextDimensions:
-        let startOfLine      = 0;
-        let countOfLine      = 0;
-        let longestLineCount = 0;
-
-        while (startOfLine < textCount)
-        {
-            let endOfLine = buffer.indexOf(UTF32_NEW_LINE, startOfLine);
-            if (endOfLine === -1) endOfLine = textCount;
-
-            let lineCount = endOfLine - startOfLine;
-            if (lineCount > longestLineCount) longestLineCount = lineCount;
-
-            countOfLine += 1;
-            startOfLine = endOfLine + 1;
-        }
-
-        context.countOfLine      = countOfLine;
-        context.longestLineCount = longestLineCount;
-    }
-}
-
-
-////////////////////////////////////////////////////////////
-export function widget_deactivate(widgetId: number)
-{
-    if (_activeWidgetId === widgetId)
-    {
-        _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
-        _activeWidget   = null as unknown as UiWidget;
-        _activeWidgetId = -1;
-    }
-}
-
-
-////////////////////////////////////////////////////////////
-export function widget_activate(widget: UiWidget)
-{
-    if (_activeWidgetId !== widget.id)
-    {
-        if (_activeWidgetId !== -1)
-            _widget_proc(_activeWidget, UiWidgetInternalEvent.DE_ACTIVATION, null);
-
-        _activeWidget   = widget;
-        _activeWidgetId = widget.id;
-        _widget_proc(_activeWidget, UiWidgetInternalEvent.ACTIVATION, null);
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-////////////////////////////////////////////////////////////
-// MARK: WIDGET LOGIC
-////////////////////////////////////////////////////////////
-export function gui_rect(id: number, rect: Rect, z: number, capabilities: UiWidgetCapability)
-{
-    let hasBeenCreatedThisFrame  : boolean = false;
-    let doesThisWidgetNeedContext: boolean = false;
-
-    let widget: UiWidget =
-    {
-        id  : id,
-        rect: rect_copy(rect),
-        z   : z,
-
-        capabilities: capabilities,
-        state       : 0,
-
-        text: null as unknown as string
-    };
-
-
-    if (capabilities & UiWidgetCapability.TEXT)
-        doesThisWidgetNeedContext = true;
-
-
-    if (doesThisWidgetNeedContext)
-    {
-        let context = _contexts.get(id) as UiContext;
-
-        if (context === undefined)
-        {
-            let context = get_context();
-            _contexts.set(id, context);
-            hasBeenCreatedThisFrame = true;
-        }
-    }
-
-    if (widget.id === _activeWidgetId)  widget.state |= UiWidgetState.GRABBED;
-    if (widget.id === _hoveredWidgetId) widget.state |= UiWidgetState.HOVERED;
-    if (widget.id === _clickedWidgetId) widget.state |= UiWidgetState.CLICKED;
-    if (hasBeenCreatedThisFrame)        widget.state |= UiWidgetState.CREATED_THIS_FRAME;
-
-    if (widget.id === _activeWidgetIdLastFrame && widget.id !== _activeWidgetId) widget.state |= UiWidgetState.DEACTIVATED_THIS_FRAME;
-    if (widget.id !== _activeWidgetIdLastFrame && widget.id === _activeWidgetId) widget.state |= UiWidgetState.ACTIVATED_THIS_FRAME;
-
-    if (widget.state & UiWidgetState.HOVERED)
-    {
-        if (capabilities & UiWidgetCapability.CLICKABLE)
-        {
-            cursor_set(MouseCursor.POINTER);
-        }
-        if (capabilities & UiWidgetCapability.TEXT)
-        {
-            cursor_set(MouseCursor.TEXT);
-        }
-    }
-
-    _currentFrameWidget.push(widget);
-
-    return widget;
-}
-
-
-
-
-////////////////////////////////////////////////////////////
-// MARK: TEXT
-////////////////////////////////////////////////////////////
-function _find_cursor_position(s: StringUtf32, font: MonoFont, scale: number, x: number, y: number): number
-{
-    let data  = s.data;
-    let count = s.count;
-
-    let cursorPosition = -1;
-    let glyphWidth     = font.width  * scale;
-    let lineHeight     = font.height * scale;
-    let cursorX        = Math.round(x / glyphWidth);
-    let cursorY        = Math.floor(y / lineHeight);
-    let startOfLine    = 0;
-    let endOfLine      = 0;
-    let lineNumber     = 0;
-
-    while (endOfLine !== -1)
-    {
-        endOfLine = string_utf32_index_of(s, UTF32_NEW_LINE, startOfLine);
-
-        if (lineNumber === cursorY)
-        {
-            if (endOfLine === -1)
-                endOfLine = count;
-
-            let lineCount    = endOfLine - startOfLine;
-            let cursorOffset = cursorX;
-            if (cursorOffset > lineCount) cursorOffset = lineCount;
-            cursorPosition = startOfLine + cursorOffset;
-
-            break;
-        }
-
-        startOfLine = endOfLine + 1;
-        lineNumber += 1;
-    }
-
-    if (cursorPosition === -1)
-    {
-        if (y > 0) cursorPosition = count;
-        else       cursorPosition = 0;
-    }
-
-    return cursorPosition;
-}
-
-
-////////////////////////////////////////////////////////////
-function _text_delete_insert(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: StringUtf32)
-{
-    s.data.copyWithin(startOfDeletion + insertion.count, endOfDeletion);
-    s.data.set(insertion.data, startOfDeletion);
-    s.count += insertion.count - (endOfDeletion - startOfDeletion);
-}
-
-
-////////////////////////////////////////////////////////////
-function _text_delete_insert_one(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: number)
-{
-    s.data.copyWithin(startOfDeletion + 1, endOfDeletion);
-    s.data[startOfDeletion] = insertion;
-    s.count += 1 - (endOfDeletion - startOfDeletion);
-}
-
-
-////////////////////////////////////////////////////////////
-function _text_delete_insert_string(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: string)
-{
-    let data            = s.data;
-    let insertionLength = insertion.length;
-
-    data.copyWithin(startOfDeletion + insertionLength, endOfDeletion);
-    for (let i=0; i < insertionLength ;i+=1)
-        data[startOfDeletion+i] = insertion.charCodeAt(i);
-    s.count += insertionLength - (endOfDeletion - startOfDeletion);
-}
-
-
-
-
-////////////////////////////////////////////////////////////
-function _text_push_mutation(rewinder: Rewinder, s: string, startOfDeletion: number, endOfDeteletion: number, insertion: string)
-{
-    let mutation: TextMutation =
-    {
-        cursor      : startOfDeletion,
-        deletedText : s.slice(startOfDeletion, endOfDeteletion),
-        insertedText: insertion.slice(0)
-    };
-    rewinder_add_mutation(rewinder, mutation);
-}
-
-
-
-
-////////////////////////////////////////////////////////////
-function _text_start_of_line_for(s: StringUtf32, cursorPosition: number): number
-{
-    let startOfLine = string_utf32_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
-    if (cursorPosition === 0) startOfLine = 0;
-    return startOfLine;
-}
-
-
-////////////////////////////////////////////////////////////
-function _text_get_line_containing_cursor(s: StringUtf32, cursorPosition: number): [number, number]
-{
-    let startOfLine = string_utf32_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
-    let endOfLine   = string_utf32_index_of(s, UTF32_NEW_LINE, cursorPosition);
-    if (cursorPosition ===  0) startOfLine = 0;
-    if (endOfLine      === -1) endOfLine   = s.count;
-    return [startOfLine, endOfLine];
-}
-
-
-////////////////////////////////////////////////////////////
-function _text_get_cursor_or_end_of_line(s: StringUtf32, startOfLine: number, offset: number): number
-{
-    let endOfLine = string_utf32_index_of(s, UTF32_NEW_LINE, startOfLine);
-    if (endOfLine === -1) endOfLine = s.count;
-    let lineCount = endOfLine - startOfLine;
-    if (offset > lineCount) offset = lineCount;
-    return startOfLine + offset;
-}
-
-
-////////////////////////////////////////////////////////////
-function _text_get_previous_word(s: StringUtf32, cursor: number): number
-{
-    let data = s.data;
-
-    while (cursor > 0 && char_is_identifier(data[cursor-1]) == false)
-        cursor -= 1;
-
-    while (cursor > 0 && char_is_identifier(data[cursor-1]))
-        cursor -= 1;
-
-    return cursor;
-}
-
-
-////////////////////////////////////////////////////////////
-function _text_get_next_word(s: StringUtf32, cursor: number): number
-{
-    let data  = s.data;
-    let count = s.count;
-
-    while (cursor < count && char_is_identifier(data[cursor]) == false)
-        cursor += 1;
-
-    while (cursor < count && char_is_identifier(data[cursor]))
-        cursor += 1;
-
-    while (cursor < count && char_is_identifier(data[cursor]) == false)
-        cursor += 1;
-
-    return cursor;
-}
-
-
-
-
-export const enum GuiTextEditorOption
-{
-    NONE             = 0,
-    SHOW_LINE_NUMBER = 1 << 0,
-}
-
-
-export function gui_draw_text_editor(widget: UiWidget, option: GuiTextEditorOption =GuiTextEditorOption.NONE)
-{
-    const TEXT_COLOR       = to_color(0.8, 0.8, 0.8, 1);
-    const BACKGROUND_COLOR = to_color(0, 0, 0, 1);
-    const SELECTION_COLOR  = to_color(0, 0, 0.6, 1);
-    const CURSOR_COLOR     = to_color(1, 0, 0, 1);
-
-    let context                 = widget_context_of(widget);
-    let text                    = context.text;
-    let data                    = text.data;
-    let count                   = text.count;
-    let offsetX                 = context.offsetX;
-    let offsetY                 = context.offsetY;
-    let rect                    = widget.rect;
-    let scale                   = context.scale;
-    let startingX               = rect.x + offsetX;
-    let x                       = startingX;
-    let y                       = rect.y + offsetY;
-    let font                    = _defaultFont;
-    let glyphWidth              = scale * font.width;
-    let lineHeight              = scale * font.height;
-    let accumulatedTextLength   = 0
-    let cursorPosition          = context.cursorPosition;
-    let selectionCursorPosition = context.selectionPosition;
-    let shouldShowCursor        = (Math.round((_nowUs - _lastInteractionTimeUs) / 500_000) & 1) === 0;
-    let totalHeight             = context.countOfLine * lineHeight;
-
-    let hasScrollBarX           = false;
-    let hasScrollBarY           = totalHeight > rect.height;
-    let sizeOfScrollCursorX     = 0;
-    let sizeOfScrollCursorY     = (rect.height / totalHeight) * rect.height;
-    let offsetOfScrollCursorX   = 0;
-    let offsetOfScrollCursorY   = (-offsetY) / totalHeight * rect.height;
-    let scrollBarThickness      = Math.round(lineHeight * 0.7);
-
-    let startOfSelection = -1;
-    let endOfSelection   = -1;
-    let isSelecting      = false;
-    if (selectionCursorPosition !== -1)
-    {
-        startOfSelection = Math.min(selectionCursorPosition, cursorPosition);
-        endOfSelection   = Math.max(selectionCursorPosition, cursorPosition);
-    }
-
-    scissor_push(rect);
-
-    let startOfLine = 0;
-    let endOfLine   = string_utf32_index_of(text, UTF32_NEW_LINE);
-    if (endOfLine === -1) endOfLine = count;
-
-    while (startOfLine < count)
-    {
-        let j = startOfLine;
-        for (; j < endOfLine ;j+=1)
-        {
-            if (accumulatedTextLength === startOfSelection) isSelecting = true;
-            if (accumulatedTextLength === endOfSelection)   isSelecting = false;
-
-            if (isSelecting)
-                draw_quad(to_rect(x, y, glyphWidth, lineHeight), widget.z + 1, SELECTION_COLOR);
-
-            if (shouldShowCursor && accumulatedTextLength === cursorPosition)
-            {
-                let cursorX = x-1;
-                if (cursorX < rect.x) cursorX = rect.x;
-                let cursorRect = to_rect(cursorX, y, scale, lineHeight);
-                draw_quad(cursorRect, widget.z + 3, CURSOR_COLOR);
-            }
-
-            accumulatedTextLength += 1;
-            x += glyphWidth;
-        }
-
-        if (shouldShowCursor && accumulatedTextLength === cursorPosition)
-        {
-            let cursorX = x-1;
-            if (cursorX < rect.x) cursorX = rect.x;
-            let cursorRect = to_rect(cursorX, y, scale, lineHeight);
-            draw_quad(cursorRect, widget.z + 2, CURSOR_COLOR);
-        }
-
-        if (accumulatedTextLength === startOfSelection) isSelecting = true;
-        if (accumulatedTextLength === endOfSelection)   isSelecting = false;
-
-        accumulatedTextLength += 1;
-        y += lineHeight;
-        x = startingX;
-
-        startOfLine = endOfLine + 1;
-        endOfLine   = string_utf32_index_of(text, UTF32_NEW_LINE, startOfLine);
-        if (endOfLine === -1) endOfLine = count;
-    }
-
-    if (shouldShowCursor && accumulatedTextLength === cursorPosition)
-    {
-        let cursorX = x-1;
-        if (cursorX < rect.x) cursorX = rect.x;
-        let cursorRect = to_rect(cursorX, y, scale, lineHeight);
-        draw_quad(cursorRect, widget.z + 2, CURSOR_COLOR);
-    }
-
-
-    x = startingX;
-    y = rect.y + offsetY;
-
-    for (let i=0; i < count ;i+=1)
-    {
-        let unicode = data[i];
-        if (unicode === UTF32_NEW_LINE)
-        {
-            y += lineHeight;
-            x = startingX;
-        }
-        else
-        {
-            font_draw_ascii(x, y, widget.z + 2, font, scale, unicode, TEXT_COLOR);
-            x += glyphWidth;
-        }
-    }
-
-    scissor_pop();
-
-    if (hasScrollBarY)
-    {
-        let backgroundScrollBarRect = to_rect(rect.x + rect.width - scrollBarThickness, rect.y                        , scrollBarThickness, rect.height);
-        let scrollBarCursorRect     = to_rect(rect.x + rect.width - scrollBarThickness, rect.y + offsetOfScrollCursorY, scrollBarThickness, sizeOfScrollCursorY);
-        draw_quad(backgroundScrollBarRect, widget.z + 5, BACKGROUND_COLOR);
-        draw_quad(scrollBarCursorRect    , widget.z + 6, TEXT_COLOR);
-    }
 }
