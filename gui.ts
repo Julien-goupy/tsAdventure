@@ -1087,22 +1087,25 @@ export function ui_text_handle_keyboard_event(context: UiTextContext): [boolean,
 // --------
             else if (event.key === GameEventKey.ENTER)
             {
-                if (context.cursorPosition >= 0)
+                if (context.flag & UiTextContextFlag.MULTI_LINE)
                 {
-                    let startOfDeletion = context.cursorPosition;
-                    let endOfDeletion   = context.cursorPosition;
-
-                    if (context.selectionPosition !== -1)
+                    if (context.cursorPosition >= 0)
                     {
-                        startOfDeletion = Math.min(context.selectionPosition, context.cursorPosition);
-                        endOfDeletion   = Math.max(context.selectionPosition, context.cursorPosition);
-                    }
+                        let startOfDeletion = context.cursorPosition;
+                        let endOfDeletion   = context.cursorPosition;
 
-                    _text_delete_insert_one(text, startOfDeletion, endOfDeletion, UTF32_NEW_LINE);
-                    context.cursorPosition    = startOfDeletion + 1;
-                    context.selectionPosition = -1;
-                    hasEventBeenProcessed     = true;
-                    hasTextBeenModified       = true;
+                        if (context.selectionPosition !== -1)
+                        {
+                            startOfDeletion = Math.min(context.selectionPosition, context.cursorPosition);
+                            endOfDeletion   = Math.max(context.selectionPosition, context.cursorPosition);
+                        }
+
+                        _text_delete_insert_one(text, startOfDeletion, endOfDeletion, UTF32_NEW_LINE);
+                        context.cursorPosition    = startOfDeletion + 1;
+                        context.selectionPosition = -1;
+                        hasEventBeenProcessed     = true;
+                        hasTextBeenModified       = true;
+                    }
                 }
             }
         }
@@ -1158,6 +1161,226 @@ export function ui_toggle_logic(id: number, rect: Rect, z: number, value: boolea
     return [state, value];
 }
 
+
+
+
+
+////////////////////////////////////////////////////////////
+// MARK: W/Text Input
+////////////////////////////////////////////////////////////
+// @Todo (JGoupy): Compress with multiline
+export function ui_text_input(id: number, rect: Rect, z: number, s: StringUtf32): StringUtf32
+{
+    let state = gui_rect(id, rect, z, UiWidgetCapability.HOVERABLE    |
+                                      UiWidgetCapability.LEFT_CLICK   |
+                                      UiWidgetCapability.ACTIVABLE    |
+                                      UiWidgetCapability.SCROLLABLE_X );
+
+    let context       = ui_text_context(id);
+    let scrollContext = ui_scroll_context(id);
+
+    if (context.createdThisFrame)
+    {
+        context.flag = UiTextContextFlag.EDITABLE;
+
+        if (s === null)
+            s = string_to_utf32("", 1024); // 1k shall be enough for almost all one line text input
+
+        context.text  = s;
+        context.scale = 2;
+
+        scrollContext.maxOffsetX = 0;
+        scrollContext.maxOffsetY = 0;
+    }
+
+
+    let font              = context.font;
+    let text              = context.text;
+    let data              = text.data;
+    let textCount         = text.count;
+    let cursorPosition    = context.cursorPosition;
+    let selectionPosition = context.selectionPosition;
+    let scale             = context.scale;
+    let charWidth         = font.width  * scale;
+    let charHeight        = font.height * scale;
+
+
+    // Logic
+    {
+        // console.log(widget_state_flag_to_string(state.flag));
+
+        if (state.flag & UiWidgetStateFlag.INTERACTING)
+        {
+            const AUTO_SCROLL_THICKNESS_IN_PIXEL = 3;
+            let localMouseX = mouseX - (rect.x + scrollContext.offsetX);
+
+            if (state.flag & UiWidgetStateFlag.START_INTERACTING_THIS_FRAME)
+            {
+                context.cursorPosition    = _find_cursor_position(text, font, scale, localMouseX, 0);
+                context.selectionPosition = context.cursorPosition;
+            }
+            else
+            {
+                context.cursorPosition = _find_cursor_position(text, font, scale, localMouseX, 0);
+            }
+
+            if (mouseX < (rect.x + AUTO_SCROLL_THICKNESS_IN_PIXEL))
+            {
+                scrollContext.offsetX += charWidth;
+                ui_scroll_enforce(scrollContext);
+            }
+            else if (mouseX > (rect.x + rect.width - AUTO_SCROLL_THICKNESS_IN_PIXEL))
+            {
+                scrollContext.offsetX -= charWidth;
+                ui_scroll_enforce(scrollContext);
+            }
+        }
+
+        let [hasCursorMoved, _] = ui_text_handle_keyboard_event(context);
+
+        if (hasCursorMoved)
+        {
+            let offsetRectInChar: Rect = to_rect(scrollContext.offsetX, scrollContext.offsetY, rect.width, rect.height);
+            offsetRectInChar.x = Math.floor(offsetRectInChar.x / charWidth);
+            offsetRectInChar.y = Math.floor(offsetRectInChar.y / charHeight);
+            offsetRectInChar.width  = Math.floor(offsetRectInChar.width  / charWidth);
+            offsetRectInChar.height = Math.floor(offsetRectInChar.height / charHeight);
+
+            // console.log(offsetRectInChar);
+
+            let startOfCursorLine = _text_start_of_line_for(text, context.cursorPosition);
+            let cursorX           = context.cursorPosition - startOfCursorLine;
+            let cursorY           = string_utf32_count(text, UTF32_NEW_LINE, 0, context.cursorPosition);
+
+            // console.log(cursorX, cursorY);
+
+            if ((cursorY + offsetRectInChar.y) >= offsetRectInChar.height) scrollContext.offsetY = (offsetRectInChar.height - cursorY - 1) * charHeight;
+            if ((cursorY + offsetRectInChar.y) < 0)                        scrollContext.offsetY = -cursorY * charHeight;
+
+            if ((cursorX + offsetRectInChar.x) >= offsetRectInChar.width) scrollContext.offsetX = (offsetRectInChar.width - cursorX) * charWidth;
+            if ((cursorX + offsetRectInChar.x) < 0)                       scrollContext.offsetX = -cursorX * charWidth;
+        }
+    }
+
+    let maxWidth = text.count * charWidth - rect.width;
+    if (maxWidth < 0) maxWidth = 0;
+    scrollContext.minOffsetX = -maxWidth;
+
+    // Draw
+    {
+        const TEXT_COLOR       = to_color(0.8, 0.8, 0.8, 1);
+        const BACKGROUND_COLOR = to_color(0, 0, 0, 1);
+        const SELECTION_COLOR  = to_color(0, 0, 0.6, 1);
+        const CURSOR_COLOR     = to_color(1, 0, 0, 1);
+
+        let text                    = context.text;
+        let data                    = text.data;
+        let count                   = text.count;
+        let offsetX                 = scrollContext.offsetX;
+        let offsetY                 = scrollContext.offsetY;
+        let scale                   = context.scale;
+        let startingX               = rect.x + offsetX;
+        let x                       = startingX;
+        let y                       = rect.y + offsetY;
+        let font                    = _defaultFont;
+        let glyphWidth              = scale * font.width;
+        let lineHeight              = scale * font.height;
+        let accumulatedTextLength   = 0
+        let cursorPosition          = context.cursorPosition;
+        let selectionCursorPosition = context.selectionPosition;
+        let shouldShowCursor        = (Math.round((_nowUs - _lastInteractionTimeUs) / 500_000) & 1) === 0;
+        let totalHeight             = context.countOfLine * lineHeight;
+
+        let startOfSelection = -1;
+        let endOfSelection   = -1;
+        let isSelecting      = false;
+        if (selectionCursorPosition !== -1)
+        {
+            startOfSelection = Math.min(selectionCursorPosition, cursorPosition);
+            endOfSelection   = Math.max(selectionCursorPosition, cursorPosition);
+        }
+
+        scissor_push(rect);
+
+        let startOfLine = 0;
+        let endOfLine   = string_utf32_index_of(text, UTF32_NEW_LINE);
+        if (endOfLine === -1) endOfLine = count;
+
+        while (startOfLine < count)
+        {
+            let j = startOfLine;
+            for (; j < endOfLine ;j+=1)
+            {
+                if (accumulatedTextLength === startOfSelection) isSelecting = true;
+                if (accumulatedTextLength === endOfSelection)   isSelecting = false;
+
+                if (isSelecting)
+                    draw_quad(to_rect(x, y, glyphWidth, lineHeight), z + 1, SELECTION_COLOR);
+
+                if (shouldShowCursor && accumulatedTextLength === cursorPosition)
+                {
+                    let cursorX = x-1;
+                    if (cursorX < rect.x) cursorX = rect.x;
+                    let cursorRect = to_rect(cursorX, y, scale, lineHeight);
+                    draw_quad(cursorRect, z + 3, CURSOR_COLOR);
+                }
+
+                accumulatedTextLength += 1;
+                x += glyphWidth;
+            }
+
+            if (shouldShowCursor && accumulatedTextLength === cursorPosition)
+            {
+                let cursorX = x-1;
+                if (cursorX < rect.x) cursorX = rect.x;
+                let cursorRect = to_rect(cursorX, y, scale, lineHeight);
+                draw_quad(cursorRect, z + 2, CURSOR_COLOR);
+            }
+
+            if (accumulatedTextLength === startOfSelection) isSelecting = true;
+            if (accumulatedTextLength === endOfSelection)   isSelecting = false;
+
+            accumulatedTextLength += 1;
+            y += lineHeight;
+            x = startingX;
+
+            startOfLine = endOfLine + 1;
+            endOfLine   = string_utf32_index_of(text, UTF32_NEW_LINE, startOfLine);
+            if (endOfLine === -1) endOfLine = count;
+        }
+
+        if (shouldShowCursor && accumulatedTextLength === cursorPosition)
+        {
+            let cursorX = x-1;
+            if (cursorX < rect.x) cursorX = rect.x;
+            let cursorRect = to_rect(cursorX, y, scale, lineHeight);
+            draw_quad(cursorRect, z + 2, CURSOR_COLOR);
+        }
+
+
+        x = startingX;
+        y = rect.y + offsetY;
+
+        for (let i=0; i < count ;i+=1)
+        {
+            let unicode = data[i];
+            if (unicode === UTF32_NEW_LINE)
+            {
+                y += lineHeight;
+                x = startingX;
+            }
+            else
+            {
+                font_draw_ascii(x, y, z + 2, font, scale, unicode, TEXT_COLOR);
+                x += glyphWidth;
+            }
+        }
+
+        scissor_pop();
+    }
+
+    return context.text;
+}
 
 
 
