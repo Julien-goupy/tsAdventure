@@ -1136,9 +1136,31 @@ export function ui_text_handle_keyboard_event(context: UiTextContext): [boolean,
 ////////////////////////////////////////////////////////////
 export function ui_button_logic(id: number, rect: Rect, z: number): UiWidgetState
 {
-    let state = gui_rect(id, rect, z, UiWidgetCapability.HOVERABLE | UiWidgetCapability.LEFT_CLICK);
+    let state = gui_rect(id, rect, z, UiWidgetCapability.HOVERABLE  |
+                                      UiWidgetCapability.LEFT_CLICK );
     return state;
 }
+
+
+
+
+////////////////////////////////////////////////////////////
+// MARK: W/Toggle
+////////////////////////////////////////////////////////////
+export function ui_toggle_logic(id: number, rect: Rect, z: number, value: boolean): [UiWidgetState, boolean]
+{
+    let state = gui_rect(id, rect, z, UiWidgetCapability.HOVERABLE          |
+                                      UiWidgetCapability.LEFT_CLICK         |
+                                      UiWidgetCapability.CLICKED_ON_PRESSED );
+
+    if (state.flag & UiWidgetStateFlag.LEFT_MOUSE_CLICKED) value = !value;
+
+    return [state, value];
+}
+
+
+
+
 
 
 
