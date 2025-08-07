@@ -1,4 +1,4 @@
-import { event_get_frame_event, GameEvent } from "./event";
+import { event_get_frame_event, frameEvents, GameEvent } from "./event";
 import { gui_process_event } from "./gui";
 import { Rect, renderer_get_window_info, renderer_immediate_flush, renderer_start_frame } from "./renderer";
 
@@ -79,14 +79,14 @@ export function game_render_one_frame(nowMs: number)
 
     let [windowRect, windowWidthInPixel, windowHeightInPixel] = renderer_get_window_info();
     renderer_start_frame();
-    let events = event_get_frame_event();
+    event_get_frame_event();
 
     _lastFrameTimeUs = _nowUs;
     _nowUs           = startOfFrameUs;
     _elapsedTimeUs   = _nowUs - _lastFrameTimeUs;
 
-    events = gui_process_event(events);
-    _currentControler.process_event(events);
+    gui_process_event();
+    _currentControler.process_event(frameEvents);
 
     _currentControler.simulate(_elapsedTimeUs, _frameId);
     _currentControler.draw(windowRect, _frameId);

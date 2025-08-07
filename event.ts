@@ -149,7 +149,8 @@ export interface GameEvent
 
 
 let _modifier: GameEventModifier = GameEventModifier.NONE;
-export let _events: GameEvent[] = []
+export let _events    : GameEvent[] = [];
+export let frameEvents: GameEvent[] = [];
 export let mouseX : number      = 0;
 export let mouseY : number      = 0;
 let _copyCutPasteModifier = GameEventModifier.CONTROL;
@@ -213,6 +214,8 @@ export async function event_init()
     function mousse_scroll(browserEvent: WheelEvent)
     {
         browserEvent.preventDefault();
+
+        // For more accuracy, analyze frequency of events or use e.deltaMode (0 for pixels, 1 for lines).
 
         let event: GameEvent = {
                                     type     : GameEventType.KEY,
@@ -490,10 +493,10 @@ export async function event_init()
 
 
 ////////////////////////////////////////////////////////////
-export function event_get_frame_event(): GameEvent[]
+export function event_get_frame_event()
 {
-    let frameEvents          : GameEvent[] = [];
-    let countOfProcessedEvent: number      = 0;
+    let countOfProcessedEvent: number = 0;
+    frameEvents.length = 0;
 
     for (let it of _events)
     {
