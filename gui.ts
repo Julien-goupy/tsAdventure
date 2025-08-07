@@ -96,11 +96,12 @@ let _activeWidget          : UiWidget = null as unknown as UiWidget;
 let _interactingWidgetId        : number = -1;
 let _previousInteractingWidgetId: number = -1;
 
-let _lastInteractionTimeUs  : number       =  0;
-let _clickedMouseButton     : GameEventKey = GameEventKey.NONE;
-let _clickedMouseButtonPressed : boolean      = false;
-let _lastClickedTimeUs      : number       =  0;
-let _consecutiveClickCounter: number       =  0;
+let _lastInteractionTimeUs    : number       =  0;
+let _clickedMouseButton       : GameEventKey = GameEventKey.NONE;
+let _clickedMouseButtonPressed: boolean      = false;
+let _lastClickedMouseButton   : GameEventKey = GameEventKey.NONE;
+let _lastClickedTimeUs        : number       =  0;
+let _consecutiveClickCounter  : number       =  0;
 
 let _currentFrameWidget : UiWidget[] = [];
 
@@ -166,8 +167,12 @@ export function gui_process_event()
             {
                 if (event.isPressed)
                 {
+                    if (_lastClickedMouseButton !== GameEventKey.MOUSSE_LEFT)
+                        _consecutiveClickCounter = 0;
+
                     _clickedMouseButtonPressed = true;
                     _clickedMouseButton     = GameEventKey.MOUSSE_LEFT;
+                    _lastClickedMouseButton = GameEventKey.MOUSSE_LEFT;
 
                     if (_activeWidgetId !== -1 && _hoveredWidgetId !== _activeWidgetId)
                     {
@@ -181,6 +186,16 @@ export function gui_process_event()
                         _interactingWidgetId   = _hoveredWidgetId;
                         _lastInteractionTimeUs = _nowUs;
                         hasEventBeenProcessed  = true;
+
+                        let deltaTimeMultiClickUs = 350_000;
+                        if (_consecutiveClickCounter > 0)
+                            deltaTimeMultiClickUs = 500_000;
+                        if (_nowUs - _lastClickedTimeUs < deltaTimeMultiClickUs)
+                            _consecutiveClickCounter += 1;
+                        else
+                            _consecutiveClickCounter = 0;
+
+                        _lastClickedTimeUs = _nowUs;
                     }
                 }
                 else
@@ -1467,11 +1482,30 @@ export function ui_text_editor(id: number, rect: Rect, z: number, s: StringUtf32
 
             if (state.flag & UiWidgetStateFlag.START_INTERACTING_THIS_FRAME)
             {
+                if (_consecutiveClickCounter == 0)
+            {
                 context.cursorPosition    = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
                 context.selectionPosition = context.cursorPosition;
+                }
+                else if (_consecutiveClickCounter == 1)
+                {
+
+                }
+                else if (_consecutiveClickCounter === 2)
+                {
+                    let [startOfCursorLine, endOfCursorLine] = _text_get_line_containing_cursor(text, cursorPosition);
+                    context.cursorPosition    = startOfCursorLine;
+                    context.selectionPosition = endOfCursorLine;
+                }
+                else if (_consecutiveClickCounter === 3)
+                {
+                    context.cursorPosition    = 0;
+                    context.selectionPosition = textCount;
+                }
             }
             else
             {
+                if (_consecutiveClickCounter == 0)
                 context.cursorPosition = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
             }
 
