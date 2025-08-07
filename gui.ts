@@ -664,7 +664,7 @@ export function ui_text_context(id: number): UiTextContext
 
 
 ////////////////////////////////////////////////////////////
-export function ui_text_handle_keyboard_event(context: UiTextContext)
+export function ui_text_handle_keyboard_event(context: UiTextContext): [boolean, boolean] // hasCursorMoved, hasTextBeenModified
 {
     // Can only be used for read
     let font              = context.font;
@@ -677,8 +677,9 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
     let charWidth         = font.width  * scale;
     let charHeight        = font.height * scale;
 
-    let isTextEditable = (context.flag & UiTextContextFlag.EDITABLE);
-
+    let isTextEditable      = (context.flag & UiTextContextFlag.EDITABLE);
+    let hasTextBeenModified = false;
+    let hasCursorMoved      = false;
 
     for (let i=0; i < frameEvents.length ;i+=1)
     {
@@ -728,6 +729,7 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
             if (context.cursorPosition < 0) context.cursorPosition = 0;
 
             hasEventBeenProcessed = true;
+            hasCursorMoved        = true;
         }
 // --------
         else if (event.key === GameEventKey.ARROW_RIGHT)
@@ -768,6 +770,7 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
             if (context.cursorPosition > context.text.count) context.cursorPosition = context.text.count;
 
             hasEventBeenProcessed = true;
+            hasCursorMoved        = true;
         }
 // --------
         else if (event.key === GameEventKey.ARROW_DOWN)
@@ -794,6 +797,7 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
             if (context.cursorPosition > context.text.count) context.cursorPosition = context.text.count;
 
             hasEventBeenProcessed = true;
+            hasCursorMoved        = true;
         }
 // --------
         else if (event.key === GameEventKey.ARROW_UP)
@@ -827,6 +831,7 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
             if (context.cursorPosition > context.text.count) context.cursorPosition = context.text.count;
 
             hasEventBeenProcessed = true;
+            hasCursorMoved        = true;
         }
 // --------
         else if (event.key === GameEventKey.HOME)
@@ -838,6 +843,7 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
             let [startOfLine, endOfLine] = _text_get_line_containing_cursor(text, cursorPosition);
             context.cursorPosition = startOfLine;
             hasEventBeenProcessed  = true;
+            hasCursorMoved         = true;
         }
 // --------
         else if (event.key === GameEventKey.END)
@@ -849,12 +855,17 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
             let [startOfLine, endOfLine] = _text_get_line_containing_cursor(text, cursorPosition);
             context.cursorPosition = endOfLine;
             hasEventBeenProcessed  = true;
+            hasCursorMoved         = true;
         }
 // --------
         else if (event.key === GameEventKey.SELECT_ALL)
         {
             context.cursorPosition    = text.count;
             context.selectionPosition = 0;
+
+            // We do not want the cursor to be set as moving
+            // because selecting all shall not modify the scrolling
+            // position
         }
 // --------
         else if (event.key === GameEventKey.COPY)
@@ -910,6 +921,7 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
 
                 context.selectionPosition = -1;
                 hasEventBeenProcessed     = true;
+                hasTextBeenModified       = true;
             }
 // --------
             else if (event.key === GameEventKey.CUT)
@@ -931,6 +943,7 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
                 context.cursorPosition    = startOfCopy;
                 context.selectionPosition = -1;
                 hasEventBeenProcessed     = true;
+                hasTextBeenModified       = true;
             }
 // --------
             else if (event.key === GameEventKey.PASTE)
@@ -948,10 +961,14 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
                 _text_delete_insert_string(text, startOfDeletion, endOfDeletion, pastedText);
                 context.cursorPosition = startOfDeletion + pastedText.length;
                 hasEventBeenProcessed  = true;
+                hasTextBeenModified    = true;
             }
 // --------
             else if (event_is_printable(event))
             {
+                hasEventBeenProcessed = true;
+                hasTextBeenModified   = true;
+
                 if (event.key === GameEventKey.TAB && context.selectionPosition !== -1)
                 {
                     let startOfIndent = Math.min(cursorPosition, context.selectionPosition);
@@ -1072,7 +1089,6 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
                     context.cursorPosition = startOfDeletion + textToInsert.length;
 
                     context.selectionPosition = -1;
-                    hasEventBeenProcessed = true;
                 }
             }
 // --------
@@ -1093,6 +1109,7 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
                     context.cursorPosition    = startOfDeletion + 1;
                     context.selectionPosition = -1;
                     hasEventBeenProcessed     = true;
+                    hasTextBeenModified       = true;
                 }
             }
         }
@@ -1106,70 +1123,7 @@ export function ui_text_handle_keyboard_event(context: UiTextContext)
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-        // if (hasEventBeenProcessed       &&
-        //     context.cursorPosition >= 0 )
-        // {
-        //     {
-        //         let buffer    = text;
-        //         let textCount = text.count;
-
-        //         // @CopyPasta
-        //         // :computeTextDimensions:
-        //         let startOfLine      = 0;
-        //         let countOfLine      = 0;
-        //         let longestLineCount = 0;
-
-        //         while (startOfLine < textCount)
-        //         {
-        //             let endOfLine = string_utf32_index_of(text, UTF32_NEW_LINE, startOfLine);
-        //             if (endOfLine === -1) endOfLine = textCount;
-
-        //             let lineCount = endOfLine - startOfLine;
-        //             if (lineCount > longestLineCount) longestLineCount = lineCount;
-
-        //             countOfLine += 1;
-        //             startOfLine = endOfLine + 1;
-        //         }
-
-        //         context.countOfLine      = countOfLine;
-        //         context.longestLineCount = longestLineCount;
-        //     }
-
-        //     let offsetRectInChar: Rect = to_rect(context.offsetX, context.offsetY, rect.width, rect.height);
-        //     offsetRectInChar.x = Math.floor(offsetRectInChar.x / charWidth);
-        //     offsetRectInChar.y = Math.floor(offsetRectInChar.y / charHeight);
-        //     offsetRectInChar.width  = Math.floor(offsetRectInChar.width  / charWidth);
-        //     offsetRectInChar.height = Math.floor(offsetRectInChar.height / charHeight);
-
-        //     // console.log(offsetRectInChar);
-
-        //     let startOfCursorLine = _text_start_of_line_for(text, context.cursorPosition);
-        //     let cursorX           = context.cursorPosition - startOfCursorLine;
-        //     let cursorY           = string_utf32_count(text, UTF32_NEW_LINE, 0, context.cursorPosition);
-
-        //     // console.log(cursorX, cursorY);
-
-        //     if ((cursorY + offsetRectInChar.y) >= offsetRectInChar.height) context.offsetY = (offsetRectInChar.height - cursorY - 1) * charHeight;
-        //     if ((cursorY + offsetRectInChar.y) < 0)                        context.offsetY = -cursorY * charHeight;
-
-        //     if ((cursorX + offsetRectInChar.x) >= offsetRectInChar.width) context.offsetX = (offsetRectInChar.width - cursorX) * charWidth;
-        //     if ((cursorX + offsetRectInChar.x) < 0)                       context.offsetX = -cursorX * charWidth;
-
-
-        // }
-    // }
+    return [hasTextBeenModified || hasCursorMoved, hasTextBeenModified];
 }
 
 
@@ -1263,7 +1217,56 @@ export function ui_text_editor(id: number, rect: Rect, z: number, s: StringUtf32
             }
         }
 
-        ui_text_handle_keyboard_event(context);
+        let [hasCursorMoved, hasTextBeenModified] = ui_text_handle_keyboard_event(context);
+
+        if (hasTextBeenModified)
+        {
+            let textCount = text.count;
+
+            // @CopyPasta
+            // :computeTextDimensions:
+            let startOfLine      = 0;
+            let countOfLine      = 0;
+            let longestLineCount = 0;
+
+            while (startOfLine < textCount)
+            {
+                let endOfLine = string_utf32_index_of(text, UTF32_NEW_LINE, startOfLine);
+                if (endOfLine === -1) endOfLine = textCount;
+
+                let lineCount = endOfLine - startOfLine;
+                if (lineCount > longestLineCount) longestLineCount = lineCount;
+
+                countOfLine += 1;
+                startOfLine = endOfLine + 1;
+            }
+
+            context.countOfLine      = countOfLine;
+            context.longestLineCount = longestLineCount;
+        }
+
+        if (hasCursorMoved)
+        {
+            let offsetRectInChar: Rect = to_rect(scrollContext.offsetX, scrollContext.offsetY, rect.width, rect.height);
+            offsetRectInChar.x = Math.floor(offsetRectInChar.x / charWidth);
+            offsetRectInChar.y = Math.floor(offsetRectInChar.y / charHeight);
+            offsetRectInChar.width  = Math.floor(offsetRectInChar.width  / charWidth);
+            offsetRectInChar.height = Math.floor(offsetRectInChar.height / charHeight);
+
+            // console.log(offsetRectInChar);
+
+            let startOfCursorLine = _text_start_of_line_for(text, context.cursorPosition);
+            let cursorX           = context.cursorPosition - startOfCursorLine;
+            let cursorY           = string_utf32_count(text, UTF32_NEW_LINE, 0, context.cursorPosition);
+
+            // console.log(cursorX, cursorY);
+
+            if ((cursorY + offsetRectInChar.y) >= offsetRectInChar.height) scrollContext.offsetY = (offsetRectInChar.height - cursorY - 1) * charHeight;
+            if ((cursorY + offsetRectInChar.y) < 0)                        scrollContext.offsetY = -cursorY * charHeight;
+
+            if ((cursorX + offsetRectInChar.x) >= offsetRectInChar.width) scrollContext.offsetX = (offsetRectInChar.width - cursorX) * charWidth;
+            if ((cursorX + offsetRectInChar.x) < 0)                       scrollContext.offsetX = -cursorX * charWidth;
+        }
     }
 
     let maxWidth = context.longestLineCount * charWidth - rect.width;
