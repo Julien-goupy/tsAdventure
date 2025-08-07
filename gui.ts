@@ -1,7 +1,7 @@
 import { _modifier, clipboard_push, event_is_keyboard, event_is_printable, frameEvents, GameEvent, GameEventKey, GameEventModifier, GameEventType, mouseX, mouseY } from "./event";
 import { _defaultFont, font_draw_ascii, MonoFont } from "./font";
 import {_nowUs, Platform, platform_get} from "./logic";
-import { draw_quad, Rect, rect_contain, scissor_pop, scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor, Color, draw_triangle } from "./renderer";
+import { draw_quad, Rect, rect_contain, scissor_pop, scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor, Color, draw_triangle, texture_blank, draw_sprite, Texture, texture_set_pixel, texture_get_pixels } from "./renderer";
 import { Rewinder, rewinder_add_mutation, rewinder_get, rewinder_pop_mutation, rewinder_redo_mutation, TextMutation } from "./rewind";
 import { char_is_identifier, string_to_utf32, string_utf32_count, string_utf32_index_of, string_utf32_last_index_of, StringUtf32, UTF32_NEW_LINE } from "./string";
 
@@ -1877,6 +1877,103 @@ export function ui_text_editor(id: number, rect: Rect, z: number, s: StringUtf32
 
     return context.text;
 }
+
+
+////////////////////////////////////////////////////////////
+// MARK: W/Image Editor
+////////////////////////////////////////////////////////////
+export interface UiImageBuffer
+{
+    texture: Texture;
+}
+
+
+////////////////////////////////////////////////////////////
+export function ui_image_buffer_create(width: number, height: number): UiImageBuffer
+{
+    let imageBuffer: UiImageBuffer =
+    {
+        texture: texture_blank(width, height),
+    };
+
+    return imageBuffer;
+}
+
+
+////////////////////////////////////////////////////////////
+export function ui_image_buffer_download(imageBuffer: UiImageBuffer)
+{
+    let texture = imageBuffer.texture;
+    let width   = texture.width;
+    let height  = texture.height;
+
+    const pixels: Uint8Array = texture_get_pixels(texture);
+
+    const tempCanvas: HTMLCanvasElement = document.createElement('canvas');
+    tempCanvas.width  = width;
+    tempCanvas.height = height;
+    let context2d = tempCanvas.getContext('2d') as CanvasRenderingContext2D;
+
+    const imageData: ImageData = context2d.createImageData(width, height);
+    for (let y=0; y < height ;y+=1)
+    {
+        for (let x=0; x < width ;x+=1)
+        {
+            const srcIdx: number = (y * width + x) * 4;
+            const dstIdx: number = ((height - 1 - y) * width + x) * 4;
+            imageData.data[dstIdx + 0] = pixels[srcIdx + 0];
+            imageData.data[dstIdx + 1] = pixels[srcIdx + 1];
+            imageData.data[dstIdx + 2] = pixels[srcIdx + 2];
+            imageData.data[dstIdx + 3] = pixels[srcIdx + 3];
+        }
+    }
+    context2d.putImageData(imageData, 0, 0);
+
+    const link: HTMLAnchorElement = document.createElement("a");
+    link.download = "paint.png";
+    link.href     = tempCanvas.toDataURL("image/png");
+    link.click();
+}
+
+
+
+
+
+////////////////////////////////////////////////////////////
+export function ui_image_paint(id: number, rect: Rect, z: number, imageBuffer: UiImageBuffer)
+{
+    let state = gui_rect(id, rect, z, UiWidgetCapability.HOVERABLE  |
+                                      UiWidgetCapability.LEFT_CLICK |
+                                      UiWidgetCapability.SCROLLABLE );
+
+
+    if (state.flag & UiWidgetStateFlag.INTERACTING)
+    {
+        let localMouseX = mouseX - (rect.x);
+        let localMouseY = mouseY - (rect.y);
+
+        texture_set_pixel(imageBuffer.texture, localMouseX, localMouseY);
+    }
+
+    for (let i=0; i < frameEvents.length ;i+=1)
+    {
+        let event = frameEvents[i];
+
+        if (event_is_keyboard(event) === false) continue;
+        if (event.isPressed          === false) continue;
+
+        if (event.key === GameEventKey.ARROW_LEFT)
+            ui_image_buffer_download(imageBuffer);
+    }
+
+    draw_sprite(rect, z, imageBuffer.texture);
+}
+
+
+
+
+
+
 
 
 

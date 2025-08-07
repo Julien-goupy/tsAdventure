@@ -582,8 +582,7 @@ export interface TextureCreationEvent
 }
 
 
-
-
+////////////////////////////////////////////////////////////
 export function texture_load(url: string, interpolation: TextureInterpolation =TextureInterpolation.LINEAR): Texture
 {
     let texture: Texture =
@@ -622,6 +621,65 @@ export function texture_load(url: string, interpolation: TextureInterpolation =T
     });
 
     return texture;
+}
+
+
+////////////////////////////////////////////////////////////
+export function texture_blank(width: number, height: number, interpolation: TextureInterpolation =TextureInterpolation.LINEAR): Texture
+{
+    let minFilter: number = _gl.LINEAR;
+    let magFilter: number = _gl.LINEAR;
+    if (interpolation === TextureInterpolation.NEAREST)
+    {
+        minFilter = _gl.NEAREST;
+        magFilter = _gl.NEAREST;
+    }
+
+    const initialData: Uint8Array = new Uint8Array(width * height * 4).fill(255); // RGBA = 255,255,255,255
+
+    let texture: WebGLTexture = _gl.createTexture()!;
+    _gl.bindTexture(_gl.TEXTURE_2D, texture);
+    _gl.texImage2D(_gl.TEXTURE_2D, 0, _gl.RGBA, width, height, 0, _gl.RGBA, _gl.UNSIGNED_BYTE, initialData);
+    _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, _gl.CLAMP_TO_EDGE);
+    _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, _gl.CLAMP_TO_EDGE);
+    _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, minFilter);
+    _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, magFilter);
+    _gl.bindTexture(_gl.TEXTURE_2D, null);
+
+    return {
+                url          : null as unknown as string,
+                glTexture    : texture,
+                width        : width,
+                height       : height,
+                interpolation: interpolation
+           };
+}
+
+
+
+////////////////////////////////////////////////////////////
+export function texture_get_pixels(texture: Texture): Uint8Array
+{
+    let width  = texture.width;
+    let height = texture.height;
+    let pixels = new Uint8Array(width * height * 4);
+
+    let framebuffer = _gl.createFramebuffer() as WebGLFramebuffer;
+    _gl.bindFramebuffer(_gl.FRAMEBUFFER, framebuffer);
+    _gl.framebufferTexture2D(_gl.FRAMEBUFFER, _gl.COLOR_ATTACHMENT0, _gl.TEXTURE_2D, texture.glTexture, 0);
+    _gl.bindFramebuffer(_gl.FRAMEBUFFER, framebuffer);
+    _gl.readPixels(0, 0, width, height, _gl.RGBA, _gl.UNSIGNED_BYTE, pixels);
+    return pixels;
+}
+
+
+
+////////////////////////////////////////////////////////////
+export function texture_set_pixel(texture: Texture, x: number, y: number)
+{
+    let brushColor: Uint8Array = new Uint8Array([255, 0, 0, 255]); // Red brush
+    _gl.bindTexture(_gl.TEXTURE_2D, texture.glTexture);
+    _gl.texSubImage2D(_gl.TEXTURE_2D, 0, x, y, 1, 1, _gl.RGBA, _gl.UNSIGNED_BYTE, brushColor);
 }
 
 
