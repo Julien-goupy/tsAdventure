@@ -226,19 +226,12 @@ export function gui_process_event()
                 }
 
                 if (_hoveredWidget.capabilities & UiWidgetCapability.SCROLLABLE_X)
-                {
                     context.offsetX -= scrollX;
-                    if (context.offsetX > context.maxOffsetX) context.offsetX = context.maxOffsetX;
-                    if (context.offsetX < context.minOffsetX) context.offsetX = context.minOffsetX;
-                }
 
                 if (_hoveredWidget.capabilities & UiWidgetCapability.SCROLLABLE_Y)
-                {
                     context.offsetY -= scrollY;
-                    if (context.offsetY > context.maxOffsetY) context.offsetY = context.maxOffsetY;
-                    if (context.offsetY < context.minOffsetY) context.offsetY = context.minOffsetY;
-                }
 
+                ui_scroll_enforce(context);
                 hasEventBeenProcessed = true;
             }
         }
@@ -484,22 +477,11 @@ export function widget_state_flag_to_string(flag: UiWidgetStateFlag): string
 
 
 
-////////////////////////////////////////////////////////////
-// MARK: W/Button
-////////////////////////////////////////////////////////////
-export function ui_button_logic(id: number, rect: Rect, z: number): UiWidgetState
-{
-    let state = gui_rect(id, rect, z, UiWidgetCapability.HOVERABLE | UiWidgetCapability.LEFT_CLICK);
-    return state;
-}
-
-
-
 
 
 
 ////////////////////////////////////////////////////////////
-// MARK: W/Zoom
+// MARK: Ctx/Zoom
 ////////////////////////////////////////////////////////////
 export interface UiZoomContext
 {
@@ -545,7 +527,7 @@ export function ui_zoom_context(id: number): UiZoomContext
 
 
 ////////////////////////////////////////////////////////////
-// MARK: W/Scroll
+// MARK: Ctx/Scroll
 ////////////////////////////////////////////////////////////
 export interface UiScrollContext
 {
@@ -601,10 +583,21 @@ export function ui_scroll_context(id: number): UiScrollContext
 }
 
 
+////////////////////////////////////////////////////////////
+export function ui_scroll_enforce(context: UiScrollContext)
+{
+    if (context.offsetX > context.maxOffsetX) context.offsetX = context.maxOffsetX;
+    if (context.offsetX < context.minOffsetX) context.offsetX = context.minOffsetX;
+    if (context.offsetY > context.maxOffsetY) context.offsetY = context.maxOffsetY;
+    if (context.offsetY < context.minOffsetY) context.offsetY = context.minOffsetY;
+}
+
+
+
 
 
 ////////////////////////////////////////////////////////////
-// MARK: W/Text
+// MARK: Ctx/Text
 ////////////////////////////////////////////////////////////
 export const enum UiTextContextFlag
 {
@@ -1132,6 +1125,26 @@ export function ui_text_handle_keyboard_event(context: UiTextContext): [boolean,
 
 
 
+
+
+
+
+
+
+////////////////////////////////////////////////////////////
+// MARK: W/Button
+////////////////////////////////////////////////////////////
+export function ui_button_logic(id: number, rect: Rect, z: number): UiWidgetState
+{
+    let state = gui_rect(id, rect, z, UiWidgetCapability.HOVERABLE | UiWidgetCapability.LEFT_CLICK);
+    return state;
+}
+
+
+
+
+
+
 ////////////////////////////////////////////////////////////
 // MARK: W/Text Editor
 ////////////////////////////////////////////////////////////
@@ -1203,6 +1216,7 @@ export function ui_text_editor(id: number, rect: Rect, z: number, s: StringUtf32
 
         if (state.flag & UiWidgetStateFlag.INTERACTING)
         {
+            const AUTO_SCROLL_THICKNESS_IN_PIXEL = 3;
             let localMouseX = mouseX - (rect.x + scrollContext.offsetX);
             let localMouseY = mouseY - (rect.y + scrollContext.offsetY);
 
@@ -1214,6 +1228,38 @@ export function ui_text_editor(id: number, rect: Rect, z: number, s: StringUtf32
             else
             {
                 context.cursorPosition = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
+            }
+
+
+            if (mouseX < (rect.x + AUTO_SCROLL_THICKNESS_IN_PIXEL))
+            {
+                scrollContext.offsetX += charWidth;
+                ui_scroll_enforce(scrollContext);
+            }
+            else if (mouseX > (rect.x + rect.width - AUTO_SCROLL_THICKNESS_IN_PIXEL))
+            {
+                // @Speed
+                let [startOfCursorLine, endOfCursorLine] = _text_get_line_containing_cursor(text, cursorPosition);
+                let lineCount                            = endOfCursorLine - startOfCursorLine;
+                let lineWidth                            = (lineCount + 1) * charWidth;
+                let maxWidth                             = lineWidth - rect.width;
+                if (maxWidth < 0) maxWidth = 0;
+
+                // For the right border, we use the current line and not
+                // the maxOffsetX. Hence the not use of ui_scroll_enforce.
+                scrollContext.offsetX -= charWidth;
+                if (scrollContext.offsetX < -maxWidth) scrollContext.offsetX = -maxWidth;
+            }
+
+            if (mouseY < (rect.y + AUTO_SCROLL_THICKNESS_IN_PIXEL))
+            {
+                scrollContext.offsetY += charHeight;
+                ui_scroll_enforce(scrollContext);
+            }
+            else if (mouseY > (rect.y + rect.height - AUTO_SCROLL_THICKNESS_IN_PIXEL))
+            {
+                scrollContext.offsetY -= charHeight;
+                ui_scroll_enforce(scrollContext);
             }
         }
 
