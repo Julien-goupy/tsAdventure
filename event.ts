@@ -148,7 +148,7 @@ export interface GameEvent
 }
 
 
-let _modifier: GameEventModifier = GameEventModifier.NONE;
+export let _modifier: GameEventModifier = GameEventModifier.NONE;
 export let _events    : GameEvent[] = [];
 export let frameEvents: GameEvent[] = [];
 export let mouseX : number      = 0;

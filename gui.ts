@@ -1,4 +1,4 @@
-import { clipboard_push, event_is_keyboard, event_is_printable, frameEvents, GameEvent, GameEventKey, GameEventModifier, GameEventType, mouseX, mouseY } from "./event";
+import { _modifier, clipboard_push, event_is_keyboard, event_is_printable, frameEvents, GameEvent, GameEventKey, GameEventModifier, GameEventType, mouseX, mouseY } from "./event";
 import { _defaultFont, font_draw_ascii, MonoFont } from "./font";
 import {_nowUs, Platform, platform_get} from "./logic";
 import { draw_quad, Rect, rect_contain, scissor_pop, scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
@@ -1473,7 +1473,6 @@ export function ui_text_editor(id: number, rect: Rect, z: number, s: StringUtf32
     // Logic
     {
         // console.log(widget_state_flag_to_string(state.flag));
-
         if (state.flag & UiWidgetStateFlag.INTERACTING)
         {
             const AUTO_SCROLL_THICKNESS_IN_PIXEL = 3;
@@ -1482,10 +1481,17 @@ export function ui_text_editor(id: number, rect: Rect, z: number, s: StringUtf32
 
             if (state.flag & UiWidgetStateFlag.START_INTERACTING_THIS_FRAME)
             {
-                if (_consecutiveClickCounter == 0)
-            {
-                context.cursorPosition    = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
-                context.selectionPosition = context.cursorPosition;
+                if ((_modifier& GameEventModifier.SHIFT) === GameEventModifier.SHIFT &&
+                    context.cursorPosition !== -1)
+                {
+                    if (context.selectionPosition === -1)
+                        context.selectionPosition = context.cursorPosition;
+                    context.cursorPosition = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
+                }
+                else if (_consecutiveClickCounter == 0)
+                {
+                    context.cursorPosition    = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
+                    context.selectionPosition = context.cursorPosition;
                 }
                 else if (_consecutiveClickCounter == 1)
                 {
@@ -1506,7 +1512,7 @@ export function ui_text_editor(id: number, rect: Rect, z: number, s: StringUtf32
             else
             {
                 if (_consecutiveClickCounter == 0)
-                context.cursorPosition = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
+                    context.cursorPosition = _find_cursor_position(text, font, scale, localMouseX, localMouseY);
             }
 
 
