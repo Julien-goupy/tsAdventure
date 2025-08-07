@@ -1,7 +1,7 @@
 import { _modifier, clipboard_push, event_is_keyboard, event_is_printable, frameEvents, GameEvent, GameEventKey, GameEventModifier, GameEventType, mouseX, mouseY } from "./event";
 import { _defaultFont, font_draw_ascii, MonoFont } from "./font";
 import {_nowUs, Platform, platform_get} from "./logic";
-import { draw_quad, Rect, rect_contain, scissor_pop, scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor } from "./renderer";
+import { draw_quad, Rect, rect_contain, scissor_pop, scissor_push, to_color, to_rect, rect_copy, cursor_set, MouseCursor, Color, draw_triangle } from "./renderer";
 import { Rewinder, rewinder_add_mutation, rewinder_get, rewinder_pop_mutation, rewinder_redo_mutation, TextMutation } from "./rewind";
 import { char_is_identifier, string_to_utf32, string_utf32_count, string_utf32_index_of, string_utf32_last_index_of, StringUtf32, UTF32_NEW_LINE } from "./string";
 
@@ -635,7 +635,9 @@ export interface UiTextContext
     createdThisFrame : boolean;
 }
 
-let _textContexts : Map<number, UiTextContext> = new Map();
+
+let _textContexts      : Map<number, UiTextContext> = new Map();
+let _textWordNavigation: GameEventModifier          = GameEventModifier.CONTROL;
 
 
 ////////////////////////////////////////////////////////////
@@ -1138,9 +1140,146 @@ export function ui_text_handle_keyboard_event(context: UiTextContext): [boolean,
 }
 
 
+////////////////////////////////////////////////////////////
+function _find_cursor_position(s: StringUtf32, font: MonoFont, scale: number, x: number, y: number): number
+{
+    let data  = s.data;
+    let count = s.count;
+
+    let cursorPosition = -1;
+    let glyphWidth     = font.width  * scale;
+    let lineHeight     = font.height * scale;
+    let cursorX        = Math.round(x / glyphWidth);
+    let cursorY        = Math.floor(y / lineHeight);
+    let startOfLine    = 0;
+    let endOfLine      = 0;
+    let lineNumber     = 0;
+
+    while (endOfLine !== -1)
+    {
+        endOfLine = string_utf32_index_of(s, UTF32_NEW_LINE, startOfLine);
+
+        if (lineNumber === cursorY)
+        {
+            if (endOfLine === -1)
+                endOfLine = count;
+
+            let lineCount    = endOfLine - startOfLine;
+            let cursorOffset = cursorX;
+            if (cursorOffset > lineCount) cursorOffset = lineCount;
+            cursorPosition = startOfLine + cursorOffset;
+
+            break;
+        }
+
+        startOfLine = endOfLine + 1;
+        lineNumber += 1;
+    }
+
+    if (cursorPosition === -1)
+    {
+        if (y > 0) cursorPosition = count;
+        else       cursorPosition = 0;
+    }
+
+    return cursorPosition;
+}
 
 
+////////////////////////////////////////////////////////////
+function _text_delete_insert(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: StringUtf32)
+{
+    s.data.copyWithin(startOfDeletion + insertion.count, endOfDeletion);
+    s.data.set(insertion.data, startOfDeletion);
+    s.count += insertion.count - (endOfDeletion - startOfDeletion);
+}
 
+
+////////////////////////////////////////////////////////////
+function _text_delete_insert_one(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: number)
+{
+    s.data.copyWithin(startOfDeletion + 1, endOfDeletion);
+    s.data[startOfDeletion] = insertion;
+    s.count += 1 - (endOfDeletion - startOfDeletion);
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_delete_insert_string(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: string)
+{
+    let data            = s.data;
+    let insertionLength = insertion.length;
+
+    data.copyWithin(startOfDeletion + insertionLength, endOfDeletion);
+    for (let i=0; i < insertionLength ;i+=1)
+        data[startOfDeletion+i] = insertion.charCodeAt(i);
+    s.count += insertionLength - (endOfDeletion - startOfDeletion);
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_start_of_line_for(s: StringUtf32, cursorPosition: number): number
+{
+    let startOfLine = string_utf32_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
+    if (cursorPosition === 0) startOfLine = 0;
+    return startOfLine;
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_get_line_containing_cursor(s: StringUtf32, cursorPosition: number): [number, number]
+{
+    let startOfLine = string_utf32_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
+    let endOfLine   = string_utf32_index_of(s, UTF32_NEW_LINE, cursorPosition);
+    if (cursorPosition ===  0) startOfLine = 0;
+    if (endOfLine      === -1) endOfLine   = s.count;
+    return [startOfLine, endOfLine];
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_get_cursor_or_end_of_line(s: StringUtf32, startOfLine: number, offset: number): number
+{
+    let endOfLine = string_utf32_index_of(s, UTF32_NEW_LINE, startOfLine);
+    if (endOfLine === -1) endOfLine = s.count;
+    let lineCount = endOfLine - startOfLine;
+    if (offset > lineCount) offset = lineCount;
+    return startOfLine + offset;
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_get_previous_word(s: StringUtf32, cursor: number): number
+{
+    let data = s.data;
+
+    while (cursor > 0 && char_is_identifier(data[cursor-1]) == false)
+        cursor -= 1;
+
+    while (cursor > 0 && char_is_identifier(data[cursor-1]))
+        cursor -= 1;
+
+    return cursor;
+}
+
+
+////////////////////////////////////////////////////////////
+function _text_get_next_word(s: StringUtf32, cursor: number): number
+{
+    let data  = s.data;
+    let count = s.count;
+
+    while (cursor < count && char_is_identifier(data[cursor]) == false)
+        cursor += 1;
+
+    while (cursor < count && char_is_identifier(data[cursor]))
+        cursor += 1;
+
+    while (cursor < count && char_is_identifier(data[cursor]) == false)
+        cursor += 1;
+
+    return cursor;
+}
 
 
 
@@ -1744,160 +1883,63 @@ export function ui_text_editor(id: number, rect: Rect, z: number, s: StringUtf32
 
 
 
-let _textWordNavigation = GameEventModifier.CONTROL;
-
-
-
-////////////////////////////////////////////////////////////
-function _find_cursor_position(s: StringUtf32, font: MonoFont, scale: number, x: number, y: number): number
-{
-    let data  = s.data;
-    let count = s.count;
-
-    let cursorPosition = -1;
-    let glyphWidth     = font.width  * scale;
-    let lineHeight     = font.height * scale;
-    let cursorX        = Math.round(x / glyphWidth);
-    let cursorY        = Math.floor(y / lineHeight);
-    let startOfLine    = 0;
-    let endOfLine      = 0;
-    let lineNumber     = 0;
-
-    while (endOfLine !== -1)
-    {
-        endOfLine = string_utf32_index_of(s, UTF32_NEW_LINE, startOfLine);
-
-        if (lineNumber === cursorY)
-        {
-            if (endOfLine === -1)
-                endOfLine = count;
-
-            let lineCount    = endOfLine - startOfLine;
-            let cursorOffset = cursorX;
-            if (cursorOffset > lineCount) cursorOffset = lineCount;
-            cursorPosition = startOfLine + cursorOffset;
-
-            break;
-        }
-
-        startOfLine = endOfLine + 1;
-        lineNumber += 1;
-    }
-
-    if (cursorPosition === -1)
-    {
-        if (y > 0) cursorPosition = count;
-        else       cursorPosition = 0;
-    }
-
-    return cursorPosition;
-}
-
-
-////////////////////////////////////////////////////////////
-function _text_delete_insert(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: StringUtf32)
-{
-    s.data.copyWithin(startOfDeletion + insertion.count, endOfDeletion);
-    s.data.set(insertion.data, startOfDeletion);
-    s.count += insertion.count - (endOfDeletion - startOfDeletion);
-}
-
-
-////////////////////////////////////////////////////////////
-function _text_delete_insert_one(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: number)
-{
-    s.data.copyWithin(startOfDeletion + 1, endOfDeletion);
-    s.data[startOfDeletion] = insertion;
-    s.count += 1 - (endOfDeletion - startOfDeletion);
-}
-
-
-////////////////////////////////////////////////////////////
-function _text_delete_insert_string(s: StringUtf32, startOfDeletion: number, endOfDeletion: number, insertion: string)
-{
-    let data            = s.data;
-    let insertionLength = insertion.length;
-
-    data.copyWithin(startOfDeletion + insertionLength, endOfDeletion);
-    for (let i=0; i < insertionLength ;i+=1)
-        data[startOfDeletion+i] = insertion.charCodeAt(i);
-    s.count += insertionLength - (endOfDeletion - startOfDeletion);
-}
-
-
 
 
 
 
 ////////////////////////////////////////////////////////////
-function _text_start_of_line_for(s: StringUtf32, cursorPosition: number): number
+// MARK: Vertex Icon
+////////////////////////////////////////////////////////////
+export function ui_vertex_icon_triangle_left(rect: Rect, z: number, color: Color)
 {
-    let startOfLine = string_utf32_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
-    if (cursorPosition === 0) startOfLine = 0;
-    return startOfLine;
+    let x0 = rect.x + rect.width;
+    let y0 = rect.y;
+    let x1 = rect.x + rect.width;
+    let y1 = rect.y + rect.height;
+    let x2 = rect.x;
+    let y2 = rect.y + rect.height/2;
+
+    draw_triangle(x0, y0, x1, y1, x2, y2, z, color);
 }
 
 
 ////////////////////////////////////////////////////////////
-function _text_get_line_containing_cursor(s: StringUtf32, cursorPosition: number): [number, number]
+export function ui_vertex_icon_triangle_up(rect: Rect, z: number, color: Color)
 {
-    let startOfLine = string_utf32_last_index_of(s, UTF32_NEW_LINE, cursorPosition - 1) + 1;
-    let endOfLine   = string_utf32_index_of(s, UTF32_NEW_LINE, cursorPosition);
-    if (cursorPosition ===  0) startOfLine = 0;
-    if (endOfLine      === -1) endOfLine   = s.count;
-    return [startOfLine, endOfLine];
+    let x0 = rect.x + rect.width;
+    let y0 = rect.y + rect.height;
+    let x1 = rect.x;
+    let y1 = rect.y + rect.height;
+    let x2 = rect.x + rect.width/2;
+    let y2 = rect.y;
+
+    draw_triangle(x0, y0, x1, y1, x2, y2, z, color);
 }
 
 
 ////////////////////////////////////////////////////////////
-function _text_get_cursor_or_end_of_line(s: StringUtf32, startOfLine: number, offset: number): number
+export function ui_vertex_icon_triangle_right(rect: Rect, z: number, color: Color)
 {
-    let endOfLine = string_utf32_index_of(s, UTF32_NEW_LINE, startOfLine);
-    if (endOfLine === -1) endOfLine = s.count;
-    let lineCount = endOfLine - startOfLine;
-    if (offset > lineCount) offset = lineCount;
-    return startOfLine + offset;
+    let x0 = rect.x;
+    let y0 = rect.y;
+    let x1 = rect.x;
+    let y1 = rect.y + rect.height;
+    let x2 = rect.x + rect.width;
+    let y2 = rect.y + rect.height/2;
+
+    draw_triangle(x0, y0, x1, y1, x2, y2, z, color);
 }
 
 
 ////////////////////////////////////////////////////////////
-function _text_get_previous_word(s: StringUtf32, cursor: number): number
+export function ui_vertex_icon_triangle_down(rect: Rect, z: number, color: Color)
 {
-    let data = s.data;
+    let x0 = rect.x + rect.width;
+    let y0 = rect.y;
+    let x1 = rect.x;
+    let y1 = rect.y;
+    let x2 = rect.x + rect.width/2;
+    let y2 = rect.y + rect.height;
 
-    while (cursor > 0 && char_is_identifier(data[cursor-1]) == false)
-        cursor -= 1;
-
-    while (cursor > 0 && char_is_identifier(data[cursor-1]))
-        cursor -= 1;
-
-    return cursor;
-}
-
-
-////////////////////////////////////////////////////////////
-function _text_get_next_word(s: StringUtf32, cursor: number): number
-{
-    let data  = s.data;
-    let count = s.count;
-
-    while (cursor < count && char_is_identifier(data[cursor]) == false)
-        cursor += 1;
-
-    while (cursor < count && char_is_identifier(data[cursor]))
-        cursor += 1;
-
-    while (cursor < count && char_is_identifier(data[cursor]) == false)
-        cursor += 1;
-
-    return cursor;
-}
-
-
-
-
-export const enum GuiTextEditorOption
-{
-    NONE             = 0,
-    SHOW_LINE_NUMBER = 1 << 0,
+    draw_triangle(x0, y0, x1, y1, x2, y2, z, color);
 }

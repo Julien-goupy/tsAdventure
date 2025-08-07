@@ -868,6 +868,73 @@ export function scissor_pop()
 ////////////////////////////////////////////////////////////
 // MARK: DRAW
 ////////////////////////////////////////////////////////////
+export function draw_triangle(x0: number, y0: number,
+                              x1: number, y1: number,
+                              x2: number, y2: number,
+                              z: number, color: Color)
+{
+    renderer_set_texture(null);
+
+    {
+        let i = _verticesCount;
+
+        // Point 1
+        _vertices[i] = x0; i += 1;
+        _vertices[i] = y0; i += 1;
+        _vertices[i] = z ; i += 1;
+
+        _vertices[i] = color.r; i += 1;
+        _vertices[i] = color.g; i += 1;
+        _vertices[i] = color.b; i += 1;
+        _vertices[i] = color.a; i += 1;
+
+        _vertices[i] = -1; i += 1;
+        _vertices[i] = -1; i += 1;
+
+        // Point 2
+        _vertices[i] = x1; i += 1;
+        _vertices[i] = y1; i += 1;
+        _vertices[i] = z ; i += 1;
+
+        _vertices[i] = color.r; i += 1;
+        _vertices[i] = color.g; i += 1;
+        _vertices[i] = color.b; i += 1;
+        _vertices[i] = color.a; i += 1;
+
+        _vertices[i] = -1; i += 1;
+        _vertices[i] = -1; i += 1;
+        // _vertices[i] =  0; i += 1;
+
+        // Point 3
+        _vertices[i] = x2; i += 1;
+        _vertices[i] = y2; i += 1;
+        _vertices[i] = z ; i += 1;
+
+        _vertices[i] = color.r; i += 1;
+        _vertices[i] = color.g; i += 1;
+        _vertices[i] = color.b; i += 1;
+        _vertices[i] = color.a; i += 1;
+
+        _vertices[i] = -1; i += 1;
+        _vertices[i] = -1; i += 1;
+        // _vertices[i] =  0; i += 1;
+    }
+
+    {
+        let i           = _indexesCount;
+        let vertexIndex = _verticesCount / 9;
+
+        _indexes[i + 0] = vertexIndex + 0;
+        _indexes[i + 1] = vertexIndex + 1;
+        _indexes[i + 2] = vertexIndex + 2;
+    }
+
+    _verticesCount += 3 * 9;
+    _indexesCount  += 3;
+}
+
+
+////////////////////////////////////////////////////////////
 export function draw_rect(rect: Rect, z: number, color: Color)
 {
     renderer_set_texture(null);
